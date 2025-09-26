@@ -1,0 +1,12 @@
+# Mollie Test Key (gebruik deze om betalingen te testen)
+MOLLIE_API_KEY=test_APVB04FQVazyHTuKBbSpScfjGtcAjK
+
+# Domein van je Framer site (pas dit aan naar jouw echte Framer-URL)
+FRONTEND_URL=https://jouwsite.framer.website
+
+# De publieke URL van je backend (Render geeft deze na de eerste deploy)
+# Bijvoorbeeld: https://mollie-backend.onrender.com
+PUBLIC_BASE_URL=http://localhost:3000
+
+# Lokaal poortnummer
+PORT=3000
