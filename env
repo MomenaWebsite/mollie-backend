@@ -2,7 +2,7 @@
 MOLLIE_API_KEY=test_APVB04FQVazyHTuKBbSpScfjGtcAjK
 
 # Domein van je Framer site (pas dit aan naar jouw echte Framer-URL)
-FRONTEND_URL=https://jouwsite.framer.website
+FRONTEND_URL=https://momenatest.framer.website
 
 # De publieke URL van je backend (Render geeft deze na de eerste deploy)
 # Bijvoorbeeld: https://mollie-backend.onrender.com
