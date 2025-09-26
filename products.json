@@ -1,0 +1,17 @@
+[
+  {
+    "id": "card-birthday",
+    "name": "Birthday Card",
+    "price": 3.95
+  },
+  {
+    "id": "card-love",
+    "name": "Love Card",
+    "price": 4.5
+  },
+  {
+    "id": "candle-cocktail",
+    "name": "Cocktail Candle",
+    "price": 12.0
+  }
+]
