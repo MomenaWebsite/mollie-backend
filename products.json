@@ -13,5 +13,10 @@
     "id": "candle-cocktail",
     "name": "Cocktail Candle",
     "price": 12.0
+  },
+    {
+    "id": "Dino-KaartVerjaardag",
+    "name": "Dinokaart",
+    "price": 4.99
   }
 ]
