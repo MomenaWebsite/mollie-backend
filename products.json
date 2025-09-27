@@ -14,10 +14,10 @@
     "name": "Cocktail Candle",
     "price": 12.0
   },
-    {
+  {
     "id": "Dino-KaartVerjaardag",
     "name": "Dinokaart",
-    "price": 4.99
+    "price": 4.99,
     "image": "https://framerusercontent.com/images/qSqEElkGQHa4mOxaJddkJVBM.jpeg?width=1153&height=2048"
   }
 ]
