@@ -1,7 +1,7 @@
 {
-  "name": "mollie-cart-backend",
+  "name": "mollie-checkout-backend",
   "version": "1.0.0",
-  "description": "Express backend for Mollie checkout with simple cart (server-side pricing)",
+  "description": "Simple Express backend for Mollie checkout (Payments API + webhook)",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
