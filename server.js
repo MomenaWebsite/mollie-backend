@@ -1,54 +1,83 @@
 /**
- * Cart + Mollie Payments backend
+ * Cart + Mollie Payments backend (robuste /api/products)
  */
-try { require('dotenv').config(); } catch {}
+try { require("dotenv").config(); } catch {}
 
-const express = require('express');
-const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
-const fetch = global.fetch || ((...args) => import('node-fetch').then(({default: f}) => f(...args)));
+const express = require("express");
+const cors = require("cors");
+const fs = require("fs");
+const path = require("path");
+const fetch =
+  global.fetch ||
+  ((...args) => import("node-fetch").then(({ default: f }) => f(...args)));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const MOLLIE_API_KEY = process.env.MOLLIE_API_KEY;
-const FRONTEND_URL = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
-const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
+const FRONTEND_URL = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
 
-if (!MOLLIE_API_KEY) console.warn('⚠️ Missing MOLLIE_API_KEY');
-if (!FRONTEND_URL) console.warn('⚠️ Missing FRONTEND_URL');
-if (!PUBLIC_BASE_URL) console.warn('⚠️ Missing PUBLIC_BASE_URL (webhookUrl may be invalid)');
+if (!MOLLIE_API_KEY) console.warn("⚠️ Missing MOLLIE_API_KEY");
+if (!FRONTEND_URL) console.warn("⚠️ Missing FRONTEND_URL");
+if (!PUBLIC_BASE_URL) console.warn("⚠️ Missing PUBLIC_BASE_URL (webhookUrl may be invalid)");
 
-// CORS: allow your Framer site
-app.use(cors({
-  origin: FRONTEND_URL || true
-}));
+/* ---------------- CORS & body parsing ---------------- */
+app.use(
+  cors({
+    // Sta je Framer domain toe; als niet gezet, sta alles toe (handig tijdens test)
+    origin: FRONTEND_URL || "*",
+  })
+);
 app.use(express.json());
-app.use('/api/mollie/webhook', express.urlencoded({ extended: false }));
+app.use("/api/mollie/webhook", express.urlencoded({ extended: false }));
 
-// In-memory status store
+/* ---------------- In-memory order status ---------------- */
 const statusesByOrderId = new Map();
 const paymentIdByOrderId = new Map();
 
-// Load products
-const PRODUCTS_PATH = path.join(__dirname, 'products.json');
-let CATALOG = [];
-try {
-  CATALOG = JSON.parse(fs.readFileSync(PRODUCTS_PATH, 'utf8'));
-} catch (e) {
-  console.error('Failed to load products.json', e);
-  CATALOG = [];
+/* ---------------- Products helpers ---------------- */
+const PRODUCTS_PATH = path.join(__dirname, "products.json");
+
+/** Lees en normaliseer products.json per request */
+function loadCatalog() {
+  try {
+    const raw = fs.readFileSync(PRODUCTS_PATH, "utf8");
+    const json = JSON.parse(raw);
+
+    // Ondersteun zowel array als { products: [...] }
+    const list = Array.isArray(json) ? json : json?.products || [];
+
+    // Normaliseer velden (id/name als string, price als number, image optioneel)
+    const normalized = list.map((p) => {
+      const priceRaw =
+        typeof p.price === "string" ? p.price.replace(",", ".") : p.price;
+      const price = Number(priceRaw) || 0;
+      return {
+        id: String(p.id),
+        name: String(p.name),
+        price,
+        image: p.image || undefined,
+      };
+    });
+
+    return normalized;
+  } catch (e) {
+    console.error("Failed to load/parse products.json:", e.message);
+    return [];
+  }
 }
 
 function getProduct(id) {
-  return CATALOG.find(p => p.id === id);
+  const catalog = loadCatalog();
+  return catalog.find((p) => p.id === id);
 }
 
 function calcTotal(items) {
   // items: [{id, qty}]
   let sum = 0;
+  const catalog = loadCatalog();
   for (const it of items || []) {
-    const p = getProduct(it.id);
+    const p = catalog.find((x) => x.id === it.id);
     const qty = Math.max(0, Number(it.qty || 0));
     if (!p || qty <= 0) continue;
     sum += p.price * qty;
@@ -56,101 +85,103 @@ function calcTotal(items) {
   return Number(sum.toFixed(2));
 }
 
-async function mollie(path, method='GET', body) {
-  const res = await fetch(`https://api.mollie.com/v2${path}`, {
+/* ---------------- Mollie helper ---------------- */
+async function mollie(pathname, method = "GET", body) {
+  const res = await fetch(`https://api.mollie.com/v2${pathname}`, {
     method,
     headers: {
-      'Authorization': `Bearer ${MOLLIE_API_KEY}`,
-      'Content-Type': 'application/json',
+      Authorization: `Bearer ${MOLLIE_API_KEY}`,
+      "Content-Type": "application/json",
     },
-    body: body ? JSON.stringify(body) : undefined
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) throw new Error(`Mollie ${res.status}: ${await res.text()}`);
   return res.json();
 }
 
-// Health
-app.get('/', (_req, res) => res.send('Cart backend up ✅'));
+/* ---------------- Routes ---------------- */
+app.get("/", (_req, res) => res.send("Cart backend up ✅"));
 
-// List products
-app.get('/api/products', (_req, res) => {
-  res.json({ products: CATALOG });
+/** Products: altijd gevuld/gestandaardiseerd */
+app.get("/api/products", (_req, res) => {
+  const catalog = loadCatalog();
+  // Kies één vorm en houd die vast: { products: [...] }
+  res.set("Cache-Control", "no-store");
+  res.json({ products: catalog });
 });
 
-// Create payment from cart
-app.post('/api/create-payment-from-cart', async (req, res) => {
+/** Maak betaling aan op basis van cart */
+app.post("/api/create-payment-from-cart", async (req, res) => {
   try {
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     const orderId = req.body?.orderId || `order_${Date.now()}`;
 
-    // Validate and price on server
     const total = calcTotal(items);
     if (!total || total <= 0) {
-      return res.status(400).json({ error: 'Cart is empty or invalid' });
+      return res.status(400).json({ error: "Cart is empty or invalid" });
     }
 
     const description = `Order ${orderId} – ${items.length} items`;
 
-    const payment = await mollie('/payments', 'POST', {
-      amount: { currency: 'EUR', value: total.toFixed(2) },
+    const payment = await mollie("/payments", "POST", {
+      amount: { currency: "EUR", value: total.toFixed(2) },
       description,
       redirectUrl: `${FRONTEND_URL}/bedankt?orderId=${encodeURIComponent(orderId)}`,
       webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
-      metadata: { orderId, items }
+      metadata: { orderId, items },
     });
 
-    // store mapping
     if (payment?.metadata?.orderId && payment?.id) {
       paymentIdByOrderId.set(payment.metadata.orderId, payment.id);
     }
 
     const checkoutUrl = payment?._links?.checkout?.href;
-    if (!checkoutUrl) throw new Error('No checkout URL from Mollie');
+    if (!checkoutUrl) throw new Error("No checkout URL from Mollie");
 
     res.json({ checkoutUrl, paymentId: payment.id, orderId, total });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to create payment' });
+    res.status(500).json({ error: "Failed to create payment" });
   }
 });
 
-// Webhook
-app.post('/api/mollie/webhook', async (req, res) => {
+/** Mollie webhook */
+app.post("/api/mollie/webhook", async (req, res) => {
   const paymentId = req.body?.id;
-  if (!paymentId) return res.status(200).send('OK');
+  if (!paymentId) return res.status(200).send("OK");
   try {
-    const payment = await mollie(`/payments/${paymentId}`, 'GET');
-    const status = payment?.status || 'unknown';
+    const payment = await mollie(`/payments/${paymentId}`, "GET");
+    const status = payment?.status || "unknown";
     const orderId = payment?.metadata?.orderId;
     if (orderId) {
       statusesByOrderId.set(orderId, status);
       paymentIdByOrderId.set(orderId, paymentId);
       console.log(`🔔 ${orderId} -> ${status}`);
     }
-    res.status(200).send('OK');
+    res.status(200).send("OK");
   } catch (e) {
-    console.error('Webhook error:', e);
-    res.status(500).send('Webhook error');
+    console.error("Webhook error:", e);
+    res.status(500).send("Webhook error");
   }
 });
 
-// Order/status helpers
-app.get('/api/order-status', (req, res) => {
+/** Order/status helpers */
+app.get("/api/order-status", (req, res) => {
   const orderId = req.query.orderId;
-  if (!orderId) return res.status(400).json({ error: 'orderId required' });
-  const status = statusesByOrderId.get(orderId) || 'unknown';
+  if (!orderId) return res.status(400).json({ error: "orderId required" });
+  const status = statusesByOrderId.get(orderId) || "unknown";
   const paymentId = paymentIdByOrderId.get(orderId) || null;
   res.json({ orderId, status, paymentId });
 });
 
-app.get('/api/payment-status', async (req, res) => {
+app.get("/api/payment-status", async (req, res) => {
   const paymentId = req.query.paymentId;
-  if (!paymentId) return res.status(400).json({ error: 'paymentId required' });
+  if (!paymentId) return res.status(400).json({ error: "paymentId required" });
   try {
-    const payment = await mollie(`/payments/${paymentId}`, 'GET');
-    res.json({ paymentId, status: payment?.status || 'unknown' });
+    const payment = await mollie(`/payments/${paymentId}`, "GET");
+    res.json({ paymentId, status: payment?.status || "unknown" });
   } catch (e) {
-    res.status(500).json({ error: 'Failed to fetch status' });
+    res.status(500).json({ error: "Failed to fetch status" });
   }
 });
 
