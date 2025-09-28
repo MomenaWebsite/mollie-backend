@@ -250,5 +250,180 @@
     "name": "Geen-Gezicht-Sneeuwpop",
     "price": 2.95,
     "image": "https://framerusercontent.com/images/3o1F7ZPNGRtWq6uvc53C53Qie4U.jpg?width=2148&height=2712"
+  },
+  {
+    "id": "Grumpy-Cat-Engel",
+    "name": "Grumpy-Cat-Engel",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/vsNuMhtHY1bpexJsaw8GQqNPs4k.jpg?width=2148&height=2712"
+  },
+  {
+    "id": "Grumpy-Cat-Kerstboom",
+    "name": "Grumpy-Cat-Kerstboom",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/wVACKoRJqbBKuxux18JhqdD0.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Grumpy-Cat-Lichtjes",
+    "name": "Grumpy-Cat-Lichtjes",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/57Ldgpgs0YHAUAJ8zSon0LGISw.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Grumpy-Cat-Kerstboom",
+    "name": "Grumpy-Cat-Kerstboom",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/wVACKoRJqbBKuxux18JhqdD0.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Grumpy-Cat-Sneeuwpop",
+    "name": "Grumpy-Cat-Sneeuwpop",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/JEKLaBNYKEK40olX0rTdQu2c2Q.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Grumpy-Cat-Stocking",
+    "name": "Grumpy-Cat-Stocking",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/LeL5pnbbXbcrv0sI1BCDUdwtJ7M.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Kerstpatroon-Bel",
+    "name": "Kerstpatroon-Bel",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/09UzcR10CoI9A2iy5u5VnIwzU.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Kerstpatroon-Kerstboom",
+    "name": "Kerstpatroon-Kerstboom",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/i7A2mLhxnof4R2IsZYOiXIcKgs.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Kerstpatroon-Kerstmuts",
+    "name": "Kerstpatroon-Kerstmuts",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/SRdNo3kMhQWGM9MnZuzaZXCI2b8.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Kerstpatroon-Rendier",
+    "name": "Kerstpatroon-Rendier",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/nogEWxfSOSBeITHryu3TX3B3ZM.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Kerstpatroon-Zuurstok",
+    "name": "Kerstpatroon-Zuurstok",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/s3TIiefhk7LbyqgUqDSar0N4uLM.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "SnowAngel-Ijsbeer",
+    "name": "SnowAngel-Ijsbeer",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/h78msH2hyUNFQqlCP12cqnq9vg.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "SnowAngel-Luiaard",
+    "name": "SnowAngel-Luiaard",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/3B3IG6pJZRMPeCG0IMl7qqlqEM0.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "SnowAngel-Otter",
+    "name": "SnowAngel-Otter",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/iNEfeMO9Epy6288KatwiMTkm1M.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "SnowAngel-RodePanda",
+    "name": "SnowAngel-RodePanda",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/1rQoQBC2avd4OFOfnMEeFmfSfIA.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "SnowAngel-Wasbeer",
+    "name": "SnowAngel-Wasbeer",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/5VXJo8aKZP29iDUWYMuw7GT7h8.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Wonderlijk-Cadeaus",
+    "name": "Wonderlijk-Cadeaus",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/oRCuNzNBVnrqM9les08Nug0XTaU.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Wonderlijk-Gemberkoek",
+    "name": "Wonderlijk-Gemberkoek",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/6DiV67WhCRKIdc2PDZiJEhi3l7M.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Wonderlijk-Kerstboom",
+    "name": "Wonderlijk-Kerstboom",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/UoOE7lcf29vNKC9J5XmUKyOq3ZQ.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Wonderlijk-Sneeuwpop",
+    "name": "Wonderlijk-Sneeuwpop",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/6bmhGAf88OhWjWic1KDS2Gfi5sI.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Wonderlijk-TeddyBear",
+    "name": "Wonderlijk-TeddyBear",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/XioaydIyUEfaC8p2Ct1rlVRn04.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Liefdes-Hart",
+    "name": "Liefdes-Hart",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/NV2YtKixN878GJ08P08m70OPaY.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Lemon-Vibes-Surfen",
+    "name": "Lemon-Vibes-Surfen",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/RvhQvPN2tUmNkHtXbL4zx4BIeIc.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Lemon-Vibes-Stoel",
+    "name": "Lemon-Vibes-Stoel",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/eEPptU0GTwZphCOlbliX6vTIg0.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Lemon-Vibes-Zwembad",
+    "name": "Lemon-Vibes-Zwembad",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/yNQ1oOi9wETo762gBqqt0GL20NU.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Lemon-Vibes-Zwemband",
+    "name": "Lemon-Vibes-Zwemband",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/Ivkuqs42vA4D6ba7L58xN0K8.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Espresso-Martini-Kaars",
+    "name": "Espresso-Martini-Kaars",
+    "price": 19.99,
+    "image": "https://framerusercontent.com/images/eh3Y2nhwvXru6WRHdyZfaN5Q4.jpg?width=1024&height=1536"
+  },
+    {
+    "id": "Latte-Macchiato-Kaars",
+    "name": "Latte-Macchiato-Kaars",
+    "price": 19.99,
+    "image": "https://framerusercontent.com/images/7SlLnIQPmnd86qzfWgS3fo5l730.jpg?width=1024&height=1536"
+  },
+    {
+    "id": "Citroen-Kaars",
+    "name": "Citroen-Kaars",
+    "price": 9.99,
+    "image": "https://framerusercontent.com/images/Mt12oBnQTBkw8oscMBqAxkP5o.png?width=1024&height=1536"
   }
+      {
 ]
