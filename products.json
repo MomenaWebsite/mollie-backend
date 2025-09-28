@@ -5,10 +5,58 @@
     "price": 2.95,
     "image": "https://framerusercontent.com/images/Y4glmvAxyERDRRr7GQZ4AKRaUhc.jpg?scale-down-to=1024&width=2148&height=2712"
   },
-  {
+    {
+    "id": "Dino-Feest-Hapje-Taart",
+    "name": "Dino-Feest-Hapje-Taart",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/u58aK2EqGzc4ZE22n9DRRPq0nk.jpg?width=2148&height=2712"
+  },
+    {
     "id": "Dino-Feest-Cadeau",
     "name": "Dino-Feest-Cadeau",
     "price": 2.95,
     "image": "https://framerusercontent.com/images/k720BxufaaLBF9JQxKkY62jMw.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Dino-Feest-Confetti",
+    "name": "Dino-Feest-Confetti",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/S1HWha5qDdVRFbiq2rGw3B5VOk.jpg?width=2148&height=2712"
+  },
+  {
+    "id": "Dino-Feest-Taart",
+    "name": "Dino-Feest-Taart",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/Lmo4OUi1E04RFkkeAOQrmDqhXc.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Turtle-Party-Ballonnen",
+    "name": "Turtle-Party-Ballonnen",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/ZTGodomoRzuGmsFneRCflw9Ahs.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Turtle-Party-Cake",
+    "name": "Turtle-Party-Cake",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/VzQskuEb9dQKjk9TheRzy4EQI2M.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Turtle-Party-Hoed",
+    "name": "Turtle-Party-Hoed",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/iadBFYzCh7z8drvCz3jxg5Aec.jpg?width=2148&height=2712"
+  },
+    {
+    "id": "Turtle-Party-Cadeau",
+    "name": "Turtle-Party-Cadeau",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/UoJtRoCV4nZRrNjx9EYWRxW06qM.jpg?width=2148&height=2712"
+  },
+  {
+    "id": "Turtle-Party-Slingers",
+    "name": "Turtle-Party-Slingers",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/yVu4R5sBylDXQtDGdPXgLUSB0o.jpg?width=2148&height=2712"
   }
 ]
