@@ -10,3 +10,10 @@ PUBLIC_BASE_URL=http://localhost:3000
 
 # Lokaal poortnummer
 PORT=3000
+
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=jouwmail@gmail.com
+SMTP_PASS=jouw_app_wachtwoord
+ORDERS_TO=bestellingen@jouwdomein.nl
