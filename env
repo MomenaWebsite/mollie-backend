@@ -1,19 +1,21 @@
-# Mollie Test Key (gebruik deze om betalingen te testen)
+# --- Mollie ---
 MOLLIE_API_KEY=test_APVB04FQVazyHTuKBbSpScfjGtcAjK
-
-# Domein van je Framer site (pas dit aan naar jouw echte Framer-URL)
 FRONTEND_URL=https://momenatest.framer.website
 
-# De publieke URL van je backend (Render geeft deze na de eerste deploy)
-# Bijvoorbeeld: https://mollie-backend.onrender.com
+# Lokaal testen -> laat dit op localhost:3000
+# Op productie moet dit je publieke backend-URL zijn (bv. https://jouw-backend.onrender.com)
 PUBLIC_BASE_URL=http://localhost:3000
-
-# Lokaal poortnummer
 PORT=3000
 
-SMTP_HOST=smtp.gmail.com
+# --- Mail via Strato SMTP ---
+SMTP_HOST=smtp.strato.com
 SMTP_PORT=587
 SMTP_SECURE=false
-SMTP_USER=jouwmail@gmail.com
-SMTP_PASS=jouw_app_wachtwoord
-ORDERS_TO=bestellingen@jouwdomein.nl
+SMTP_USER=bestellingen@momena.nl
+SMTP_PASS=Beenen#GW*0501
+
+# Van-adres (komt zo bij klant binnen)
+MAIL_FROM="Momena Shop <bestellingen@momena.nl>"
+
+# Bestellingen gaan hierheen
+MAIL_TO=bestellingen@jouwdomein.nl
