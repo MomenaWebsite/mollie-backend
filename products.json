@@ -4,5 +4,11 @@
     "name": "Dino-Feest-Ballonnen",
     "price": 2.95,
     "image": "https://framerusercontent.com/images/Y4glmvAxyERDRRr7GQZ4AKRaUhc.jpg?scale-down-to=1024&width=2148&height=2712"
+  },
+  {
+    "id": "Dino-Feest-Cadeau",
+    "name": "Dino-Feest-Cadeau",
+    "price": 2.95,
+    "image": "https://framerusercontent.com/images/k720BxufaaLBF9JQxKkY62jMw.jpg?width=2148&height=2712"
   }
 ]
