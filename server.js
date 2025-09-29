@@ -20,17 +20,19 @@ const MOLLIE_API_KEY = process.env.MOLLIE_API_KEY;
 const FRONTEND_URL = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
 
-// E-mail env
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
-const SMTP_SECURE = String(process.env.SMTP_SECURE || "false") === "true";
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
-const ORDERS_TO = process.env.ORDERS_TO;              // ontvanger
-const ORDERS_FROM = process.env.ORDERS_FROM || (SMTP_USER || "no-reply@example.com"); // afzender
+// E-mail env (LET OP: gebruik precies deze keys in Render/.env)
+const SMTP_HOST   = process.env.SMTP_HOST;
+const SMTP_PORT   = Number(process.env.SMTP_PORT || 587);
+const SMTP_SECURE = String(process.env.SMTP_SECURE || "false").toLowerCase() === "true";
+const SMTP_USER   = process.env.SMTP_USER;
+const SMTP_PASS   = process.env.SMTP_PASS;
 
-if (!MOLLIE_API_KEY) console.warn("⚠️ Missing MOLLIE_API_KEY");
-if (!FRONTEND_URL) console.warn("⚠️ Missing FRONTEND_URL");
+// ontvanger & afzender
+const ORDERS_TO   = process.env.ORDERS_TO; // bv. bestellingen@momena.nl
+const ORDERS_FROM = process.env.ORDERS_FROM || (SMTP_USER || "no-reply@example.com");
+
+if (!MOLLIE_API_KEY)  console.warn("⚠️ Missing MOLLIE_API_KEY");
+if (!FRONTEND_URL)    console.warn("⚠️ Missing FRONTEND_URL");
 if (!PUBLIC_BASE_URL) console.warn("⚠️ Missing PUBLIC_BASE_URL (webhookUrl may be invalid)");
 if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !ORDERS_TO) {
   console.warn("⚠️ SMTP/Email env ontbreekt (SMTP_HOST, SMTP_USER, SMTP_PASS, ORDERS_TO). Emails worden niet verstuurd.");
@@ -42,17 +44,13 @@ if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
   transporter = nodemailer.createTransport({
     host: SMTP_HOST,
     port: SMTP_PORT,
-    secure: SMTP_SECURE,
+    secure: SMTP_SECURE, // Strato: meestal false + poort 587
     auth: { user: SMTP_USER, pass: SMTP_PASS },
   });
 }
 
 /* ------------ CORS & body parsing ------------ */
-app.use(
-  cors({
-    origin: FRONTEND_URL || "*",
-  })
-);
+app.use(cors({ origin: FRONTEND_URL || "*" }));
 app.use(express.json());
 app.use("/api/mollie/webhook", express.urlencoded({ extended: false }));
 
@@ -152,7 +150,12 @@ function buildOrderEmailHtml({ orderId, status, items, payment }) {
     const qty = Number(it.qty || 0);
     const lineTotal = (p.price || 0) * qty;
 
-    const noteHtml = it.note ? `<div style="margin-top:6px;"><b>Bericht op kaart:</b><br/><pre style="white-space:pre-wrap;font:inherit;border:1px solid #eee;border-radius:8px;padding:8px;background:#fafafa;">${escapeHtml(it.note)}</pre></div>` : "";
+    const noteHtml = it.note
+      ? `<div style="margin-top:6px;">
+           <b>Bericht op kaart:</b><br/>
+           <pre style="white-space:pre-wrap;font:inherit;border:1px solid #eee;border-radius:8px;padding:8px;background:#fafafa;">${escapeHtml(it.note)}</pre>
+         </div>`
+      : "";
 
     const shippingHtml = it.sendNow && it.shipping
       ? `<div style="margin-top:6px;"><b>Verzenden naar:</b>${renderAddressHtml(it.shipping)}</div>`
@@ -282,6 +285,7 @@ app.post("/api/mollie/webhook", async (req, res) => {
   try {
     const payment = await mollie(`/payments/${paymentId}`, "GET");
     const status = payment?.status || "unknown";
+    theOrderId = payment?.metadata?.orderId;
     const orderId = payment?.metadata?.orderId;
     const items = Array.isArray(payment?.metadata?.items) ? payment.metadata.items : [];
 
@@ -328,10 +332,40 @@ app.get("/api/payment-status", async (req, res) => {
   }
 });
 
+/** Test e-mail (om SMTP snel te checken) */
+app.get("/api/test-email", async (_req, res) => {
+  try {
+    await sendOrderEmail({
+      orderId: "TEST-" + Date.now(),
+      status: "paid",
+      items: [
+        {
+          id: "test-product",
+          qty: 1,
+          note: "Dit is een testbericht.",
+          sendNow: true,
+          shipping: {
+            firstName: "Test",
+            lastName: "Klant",
+            streetAndNumber: "Dorpsstraat 1",
+            postalCode: "1234 AB",
+            city: "Amsterdam",
+            country: "Nederland",
+          },
+        },
+      ],
+      payment: { id: "dummy" },
+    });
+    res.json({ ok: true, message: "Testmail verzonden (check ORDERS_TO inbox)" });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`✅ Server on :${PORT}`);
   console.log(`FRONTEND_URL: ${FRONTEND_URL}`);
   console.log(`PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}`);
-  if (transporter) console.log("✉️  Email transporter klaar ( Nodemailer )");
+  if (transporter) console.log("✉️  Email transporter klaar (Nodemailer)");
   else console.log("✉️  Email transporter NIET actief (check .env SMTP settings)");
 });
