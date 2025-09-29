@@ -1,21 +1,19 @@
 # --- Mollie ---
 MOLLIE_API_KEY=test_APVB04FQVazyHTuKBbSpScfjGtcAjK
 FRONTEND_URL=https://momenatest.framer.website
-
-# Lokaal testen -> laat dit op localhost:3000
-# Op productie moet dit je publieke backend-URL zijn (bv. https://jouw-backend.onrender.com)
-PUBLIC_BASE_URL=http://localhost:3000
+PUBLIC_BASE_URL=https://mollie-backend-l0zv.onrender.com
 PORT=3000
 
-# --- Mail via Strato SMTP ---
+# --- Mail via Strato ---
 SMTP_HOST=smtp.strato.com
 SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=bestellingen@momena.nl
 SMTP_PASS=Beenen#GW*0501
 
-# Van-adres (komt zo bij klant binnen)
-MAIL_FROM="Momena Shop <bestellingen@momena.nl>"
+# From/To
+ORDER_EMAIL_FROM="Momena Shop <no-reply@momena.nl>"
+ORDER_EMAIL_TO=bestellingen@momena.nl
 
-# Bestellingen gaan hierheen
-MAIL_TO=bestellingen@jouwdomein.nl
+# (optional) protect test endpoint
+TEST_TOKEN=ietsLangsEnMoeilijk
