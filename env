@@ -4,16 +4,15 @@ FRONTEND_URL=https://momenatest.framer.website
 PUBLIC_BASE_URL=https://mollie-backend-l0zv.onrender.com
 PORT=3000
 
-# --- Mail via Strato ---
+# --- Mail via Strato SMTP ---
 SMTP_HOST=smtp.strato.com
-SMTP_PORT=456
+SMTP_PORT=465
 SMTP_SECURE=true
 SMTP_USER=bestellingen@momena.nl
-SMTP_PASS=Beenen#GW*0501
+SMTP_PASS=BlijeKaarten#MB*0501
 
-# From/To
+# Van-adres (komt zo bij klant binnen)
 ORDER_EMAIL_FROM="Momena Shop <no-reply@momena.nl>"
-ORDER_EMAIL_TO=bestellingen@momena.nl
 
-# (optional) protect test endpoint
-TEST_TOKEN=ietsLangsEnMoeilijk
+# Bestellingen gaan hierheen
+ORDER_EMAIL_TO=bestellingen@momena.nl
