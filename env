@@ -6,8 +6,8 @@ PORT=3000
 
 # --- Mail via Strato ---
 SMTP_HOST=smtp.strato.com
-SMTP_PORT=587
-SMTP_SECURE=false
+SMTP_PORT=456
+SMTP_SECURE=true
 SMTP_USER=bestellingen@momena.nl
 SMTP_PASS=Beenen#GW*0501
 
