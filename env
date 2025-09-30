@@ -7,12 +7,12 @@ PORT=3000
 # --- Mail via Strato SMTP ---
 SMTP_HOST=smtp.strato.com
 SMTP_PORT=587
-SMTP_SECURE=fals
+SMTP_SECURE=false
 SMTP_USER=bestellingen@momena.nl
 SMTP_PASS=BlijeKaarten#MB*0501
 
 # Van-adres (komt zo bij klant binnen)
-ORDER_EMAIL_FROM="Momena Shop <no-reply@momena.nl>"
+ORDERS_FROM="Momena Shop <no-reply@momena.nl>"
 
 # Bestellingen gaan hierheen
-ORDER_EMAIL_TO=bestellingen@momena.nl
+ORDERS_TO=bestellingen@momena.nl
