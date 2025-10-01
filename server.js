@@ -92,16 +92,52 @@ app.get("/api/products", (_req, res) => {
   res.json({ products: catalog });
 });
 
-/** Maak betaling aan op basis van cart */
+/** Maak betaling aan op basis van cart + sender info */
 app.post("/api/create-payment-from-cart", async (req, res) => {
   try {
-    // items [{ id, qty, note?, sendNow?, shipping?{firstName,lastName,streetAndNumber,postalCode,city,country} }]
+    // body structuur (vanuit frontend):
+    // {
+    //   items: [{ id, qty, note?, sendNow?, shipping?{firstName,lastName,streetAndNumber,postalCode,city,country} }],
+    //   sender: {
+    //     firstName, lastName, street, number, postalCode, city, country, phone, email, streetAndNumber?
+    //   },
+    //   senderPrefs: { tosAccepted: boolean, newsletter: boolean },
+    //   orderId?: string
+    // }
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const rawSender = req.body?.sender || {};
+    const senderPrefs = req.body?.senderPrefs || {};
     const orderId = req.body?.orderId || `order_${Date.now()}`;
 
     const total = calcTotal(items);
     if (!total || total <= 0) {
       return res.status(400).json({ error: "Cart is empty or invalid" });
+    }
+
+    // Normaliseer sender en voeg streetAndNumber toe als die los is aangeleverd
+    const sender = {
+      firstName: String(rawSender.firstName || ""),
+      lastName: String(rawSender.lastName || ""),
+      street: String(rawSender.street || ""),
+      number: String(rawSender.number || ""),
+      postalCode: String(rawSender.postalCode || ""),
+      city: String(rawSender.city || ""),
+      country: String(rawSender.country || ""),
+      phone: String(rawSender.phone || ""),
+      email: String(rawSender.email || ""),
+      streetAndNumber: String(
+        rawSender.streetAndNumber || `${rawSender.street || ""} ${rawSender.number || ""}`.trim()
+      ),
+    };
+
+    // Zachte validatie (loggen i.p.v. hard blocken — frontend houdt al tegen)
+    const missingSenderFields = [];
+    for (const key of ["firstName","lastName","street","number","postalCode","city","country","phone","email"]) {
+      if (!sender[key]?.toString().trim()) missingSenderFields.push(key);
+    }
+    if (missingSenderFields.length) {
+      console.warn(`ℹ️ Sender mist velden: ${missingSenderFields.join(", ")}`);
+      // We blokkeren hier NIET; frontend valideert al, dit is vooral logging.
     }
 
     const description = `Order ${orderId} – ${items.length} items`;
@@ -111,7 +147,8 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
       description,
       redirectUrl: `${FRONTEND_URL}/bedankt?orderId=${encodeURIComponent(orderId)}`,
       webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
-      metadata: { orderId, items }, // note + shipping blijven gewoon meekomen
+      // ⬇️ Alles meegeven in metadata, zodat je het in Mollie terugziet
+      metadata: { orderId, items, sender, senderPrefs },
     });
 
     if (payment?.metadata?.orderId && payment?.id) {
