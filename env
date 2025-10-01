@@ -3,3 +3,5 @@ MOLLIE_API_KEY=test_APVB04FQVazyHTuKBbSpScfjGtcAjK
 FRONTEND_URL=https://momenatest.framer.website
 PUBLIC_BASE_URL=https://mollie-backend-l0zv.onrender.com
 PORT=3000
+JWT_SECRET=jK7sF5pL2qR9wY3vT8hG4dC1zB6xN0mP5kQ9aR2sD8fG1hJ3kL7m
+
