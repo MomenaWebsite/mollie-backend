@@ -1,16 +1,19 @@
 {
   "name": "mollie-checkout-backend",
   "version": "1.0.0",
-  "description": "Simple Express backend for Mollie checkout (Payments API + webhook)",
+  "description": "Simple Express backend for Mollie checkout (Payments API + webhook + accounts)",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
     "node-fetch": "^3.3.2"
   }
 }
