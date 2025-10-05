@@ -1,5 +1,5 @@
 /**
- * Cart + Mollie Payments backend (robuste /api/products) — met eenvoudige Accounts (JWT + file store)
+ * Cart + Mollie Payments backend — met persistente Accounts (JWT + Prisma/Postgres)
  */
 try { require("dotenv").config(); } catch {}
 
@@ -11,60 +11,107 @@ const crypto = require("crypto");
 const cookieParser = require("cookie-parser");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { PrismaClient } = require("@prisma/client");
 const fetch =
   global.fetch ||
   ((...args) => import("node-fetch").then(({ default: f }) => f(...args)));
 
 const app = express();
+const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 
 /* ------------ ENV ------------ */
 const MOLLIE_API_KEY  = process.env.MOLLIE_API_KEY;
 const FRONTEND_URL    = (process.env.FRONTEND_URL    || "").replace(/\/$/, "");
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
-const JWT_SECRET      = process.env.JWT_SECRET || crypto.randomBytes(32).toString("hex"); // zet zelf in .env!
+// Belangrijk: verander JWT_SECRET niet per deploy, anders logt iedereen uit
+const JWT_SECRET      = process.env.JWT_SECRET || "change-me-in-env";
 
 if (!MOLLIE_API_KEY)  console.warn("⚠️ Missing MOLLIE_API_KEY");
 if (!FRONTEND_URL)    console.warn("⚠️ Missing FRONTEND_URL");
 if (!PUBLIC_BASE_URL) console.warn("⚠️ Missing PUBLIC_BASE_URL (webhookUrl may be invalid)");
+if (JWT_SECRET === "change-me-in-env") console.warn("⚠️ Set a strong JWT_SECRET in env");
 
 /* ------------ CORS & body parsing ------------ */
-/** LET OP: credentials:true zodat cookies (JWT) werken in de browser (cross-site). */
+/** credentials:true zodat cookies (JWT) werken in de browser (cross-site). */
+function parseOrigins(input) {
+  const s = String(input || "").trim();
+  if (!s) return [];
+  return s.split(",").map(x => x.trim()).filter(Boolean);
+}
+const ALLOWED_ORIGINS = parseOrigins(FRONTEND_URL); // ondersteunt ook komma-gescheiden lijst
+
 app.use(cors({
-  origin: FRONTEND_URL || "*",
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // curl/postman
+    if (ALLOWED_ORIGINS.length === 0) return cb(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    return cb(new Error("CORS blocked for origin: " + origin));
+  },
   credentials: true,
 }));
 app.use(express.json());
 app.use(cookieParser());
 app.use("/api/mollie/webhook", express.urlencoded({ extended: false }));
 
-/* ------------ In-memory order status ------------ */
+/* ------------ In-memory order status (ok, dit mag in memory) ------------ */
 const statusesByOrderId = new Map();
 const paymentIdByOrderId = new Map();
 
-/* ------------ Users (file store) ------------ */
-const USERS_PATH = path.join(__dirname, "users.json");
-function readUsersFile() {
-  try {
-    const raw = fs.readFileSync(USERS_PATH, "utf8");
-    const json = JSON.parse(raw);
-    return Array.isArray(json?.users) ? json.users : [];
-  } catch {
-    return [];
-  }
+/* ------------ Users (DB via Prisma) ------------ */
+// Verwacht Prisma model:
+//
+// model User {
+//   id         String   @id @default(cuid())
+//   email      String   @unique
+//   password   String
+//   firstName  String?
+//   lastName   String?
+//   street     String?
+//   number     String?
+//   postalCode String?
+//   city       String?
+//   country    String?
+//   phone      String?
+//   createdAt  DateTime @default(now())
+//   updatedAt  DateTime @updatedAt
+// }
+
+async function findUserByEmail(email) {
+  const e = String(email || "").toLowerCase();
+  if (!e) return null;
+  return prisma.user.findUnique({ where: { email: e } });
 }
-function writeUsersFile(users) {
-  fs.writeFileSync(USERS_PATH, JSON.stringify({ users }, null, 2));
+async function createUser({ email, password, profile }) {
+  const hash = await bcrypt.hash(String(password), 10);
+  const data = {
+    email: String(email).toLowerCase(),
+    password: hash,
+    firstName: profile?.firstName || null,
+    lastName: profile?.lastName || null,
+    street: profile?.street || null,
+    number: profile?.number || null,
+    postalCode: profile?.postalCode || null,
+    city: profile?.city || null,
+    country: profile?.country || null,
+    phone: profile?.phone || null,
+  };
+  return prisma.user.create({ data });
 }
-function findUserByEmail(email) {
-  const users = readUsersFile();
-  return users.find(u => u.email.toLowerCase() === String(email || "").toLowerCase());
-}
-function saveUser(user) {
-  const users = readUsersFile();
-  const i = users.findIndex(u => u.email.toLowerCase() === user.email.toLowerCase());
-  if (i >= 0) users[i] = user; else users.push(user);
-  writeUsersFile(users);
+async function updateUserProfile(userId, profile = {}) {
+  return prisma.user.update({
+    where: { id: userId },
+    data: {
+      firstName: profile.firstName ?? undefined,
+      lastName: profile.lastName ?? undefined,
+      street: profile.street ?? undefined,
+      number: profile.number ?? undefined,
+      postalCode: profile.postalCode ?? undefined,
+      city: profile.city ?? undefined,
+      country: profile.country ?? undefined,
+      phone: profile.phone ?? undefined,
+    },
+  });
 }
 
 /* ------------ Auth helpers ------------ */
@@ -156,27 +203,10 @@ app.post("/api/signup", async (req, res) => {
     const { email, password, profile } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: "email en password verplicht" });
 
-    if (findUserByEmail(email)) return res.status(400).json({ error: "Account bestaat al" });
+    const exists = await findUserByEmail(email);
+    if (exists) return res.status(400).json({ error: "Account bestaat al" });
 
-    const passwordHash = await bcrypt.hash(String(password), 10);
-    const user = {
-      id: crypto.randomUUID(),
-      email: String(email),
-      passwordHash,
-      profile: {
-        firstName: profile?.firstName || "",
-        lastName: profile?.lastName || "",
-        street: profile?.street || "",
-        number: profile?.number || "",
-        postalCode: profile?.postalCode || "",
-        city: profile?.city || "",
-        country: profile?.country || "",
-        phone: profile?.phone || "",
-        email: String(email), // mag gelijk zijn aan login email
-      },
-      createdAt: new Date().toISOString(),
-    };
-    saveUser(user);
+    const user = await createUser({ email, password, profile });
 
     const token = signJwt({ userId: user.id, email: user.email });
     res.cookie("token", token, {
@@ -186,8 +216,25 @@ app.post("/api/signup", async (req, res) => {
       maxAge: 1000 * 60 * 60 * 24 * 30,
     });
 
-    res.json({ ok: true, user: { email: user.email, profile: user.profile } });
+    res.json({
+      ok: true,
+      user: {
+        email: user.email,
+        profile: {
+          firstName: user.firstName || "",
+          lastName: user.lastName || "",
+          street: user.street || "",
+          number: user.number || "",
+          postalCode: user.postalCode || "",
+          city: user.city || "",
+          country: user.country || "",
+          phone: user.phone || "",
+          email: user.email,
+        },
+      },
+    });
   } catch (e) {
+    console.error("Signup error:", e);
     res.status(500).json({ error: "Signup mislukt" });
   }
 });
@@ -195,9 +242,10 @@ app.post("/api/signup", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body || {};
-    const user = findUserByEmail(email);
+    const user = await findUserByEmail(email);
     if (!user) return res.status(400).json({ error: "Onbekend account" });
-    const ok = await bcrypt.compare(String(password || ""), user.passwordHash);
+
+    const ok = await bcrypt.compare(String(password || ""), user.password);
     if (!ok) return res.status(400).json({ error: "Ongeldig wachtwoord" });
 
     const token = signJwt({ userId: user.id, email: user.email });
@@ -208,41 +256,80 @@ app.post("/api/login", async (req, res) => {
       maxAge: 1000 * 60 * 60 * 24 * 30,
     });
 
-    res.json({ ok: true, user: { email: user.email, profile: user.profile } });
-  } catch {
+    res.json({
+      ok: true,
+      user: {
+        email: user.email,
+        profile: {
+          firstName: user.firstName || "",
+          lastName: user.lastName || "",
+          street: user.street || "",
+          number: user.number || "",
+          postalCode: user.postalCode || "",
+          city: user.city || "",
+          country: user.country || "",
+          phone: user.phone || "",
+          email: user.email,
+        },
+      },
+    });
+  } catch (e) {
+    console.error("Login error:", e);
     res.status(500).json({ error: "Login mislukt" });
   }
 });
 
 app.post("/api/logout", (_req, res) => {
-  res.clearCookie("token", { httpOnly: true, secure: true, sameSite: "none" });
+  res.clearCookie("token", { path: "/", sameSite: "none", secure: true });
   res.json({ ok: true });
 });
 
-app.get("/api/me", authRequired, (req, res) => {
-  const me = findUserByEmail(req.user.email);
-  if (!me) return res.status(404).json({ error: "Niet gevonden" });
-  res.json({ email: me.email, profile: me.profile });
+app.get("/api/me", authRequired, async (req, res) => {
+  try {
+    const me = await prisma.user.findUnique({ where: { id: req.user.userId } });
+    if (!me) return res.status(404).json({ error: "Niet gevonden" });
+    res.json({
+      email: me.email,
+      profile: {
+        firstName: me.firstName || "",
+        lastName: me.lastName || "",
+        street: me.street || "",
+        number: me.number || "",
+        postalCode: me.postalCode || "",
+        city: me.city || "",
+        country: me.country || "",
+        phone: me.phone || "",
+        email: me.email,
+      },
+    });
+  } catch (e) {
+    console.error("Me error:", e);
+    res.status(500).json({ error: "Niet gevonden" });
+  }
 });
 
-app.put("/api/me", authRequired, (req, res) => {
-  const me = findUserByEmail(req.user.email);
-  if (!me) return res.status(404).json({ error: "Niet gevonden" });
-
-  const p = req.body?.profile || {};
-  me.profile = {
-    firstName: p.firstName || "",
-    lastName: p.lastName || "",
-    street: p.street || "",
-    number: p.number || "",
-    postalCode: p.postalCode || "",
-    city: p.city || "",
-    country: p.country || "",
-    phone: p.phone || "",
-    email: me.email,
-  };
-  saveUser(me);
-  res.json({ ok: true, profile: me.profile });
+app.put("/api/me", authRequired, async (req, res) => {
+  try {
+    const p = req.body?.profile || {};
+    const updated = await updateUserProfile(req.user.userId, p);
+    res.json({
+      ok: true,
+      profile: {
+        firstName: updated.firstName || "",
+        lastName: updated.lastName || "",
+        street: updated.street || "",
+        number: updated.number || "",
+        postalCode: updated.postalCode || "",
+        city: updated.city || "",
+        country: updated.country || "",
+        phone: updated.phone || "",
+        email: updated.email,
+      },
+    });
+  } catch (e) {
+    console.error("Update profile error:", e);
+    res.status(500).json({ error: "Opslaan mislukt" });
+  }
 });
 
 /* --------- Checkout (metadata bevat sender + senderPrefs indien meegestuurd) ---------- */
