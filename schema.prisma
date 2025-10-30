@@ -8,17 +8,21 @@ generator client {
 }
 
 model User {
-  id         String   @id @default(cuid())
-  email      String   @unique
-  password   String
-  firstName  String?
-  lastName   String?
-  street     String?
-  number     String?
-  postalCode String?
-  city       String?
-  country    String?
-  phone      String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                String    @id @default(cuid())
+  email             String    @unique
+  password          String
+  firstName         String?
+  lastName          String?
+  street            String?
+  number            String?
+  postalCode        String?
+  city              String?
+  country           String?
+  phone             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // NIEUWE VELDEN VOOR WACHTWOORD RESET
+  resetToken        String?   // Token om de gebruiker te authenticeren
+  resetTokenExpires DateTime? // Vervaldatum van de token
 }
