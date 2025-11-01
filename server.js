@@ -1,6 +1,6 @@
 /**
- * Cart + Mollie Payments backend — met persistente Accounts (JWT + Prisma/Postgres)
- */
+ * Cart + Mollie Payments backend — met persistente Accounts (JWT + Prisma/Postgres)
+ */
 try {
 	require("dotenv").config();
 } catch {}
@@ -65,20 +65,20 @@ async function sendResetEmail(userEmail, resetLink) {
 		to: userEmail,
 		subject: 'Wachtwoord Resetten voor uw account',
 		html: `
-            <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-                <p>Hallo,</p>
-                <p>U ontvangt deze e-mail omdat u een verzoek heeft ingediend om uw wachtwoord te resetten.</p>
-                <p>Klik op de onderstaande knop om uw wachtwoord te wijzigen. Deze link is slechts één uur geldig.</p>
-                <div style="margin: 20px 0;">
-                    <a href="${resetLink}" 
-                        style="display: inline-block; padding: 10px 20px; color: #ffffff; background-color: #007bff; border-radius: 5px; text-decoration: none; font-weight: bold;"
-                    >
-                        Wachtwoord Resetten
-                    </a>
-                </div>
-                <p>Als u dit niet heeft aangevraagd, kunt u deze e-mail negeren. Uw wachtwoord zal dan ongewijzigd blijven.</p>
-            </div>
-        `,
+            <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+                <p>Hallo,</p>
+                <p>U ontvangt deze e-mail omdat u een verzoek heeft ingediend om uw wachtwoord te resetten.</p>
+                <p>Klik op de onderstaande knop om uw wachtwoord te wijzigen. Deze link is slechts één uur geldig.</p>
+                <div style="margin: 20px 0;">
+                    <a href="${resetLink}" 
+                        style="display: inline-block; padding: 10px 20px; color: #ffffff; background-color: #007bff; border-radius: 5px; text-decoration: none; font-weight: bold;"
+                    >
+                        Wachtwoord Resetten
+                    </a>
+                </div>
+                <p>Als u dit niet heeft aangevraagd, kunt u deze e-mail negeren. Uw wachtwoord zal dan ongewijzigd blijven.</p>
+            </div>
+        `,
 	};
 
 	try {
@@ -90,19 +90,32 @@ async function sendResetEmail(userEmail, resetLink) {
 	}
 }
 
-/* ------------ CORS & body parsing ------------ */
+/* ------------ CORS & body parsing (AANGEPAST VOOR FRAMER PREVIEW) ------------ */
 function parseOrigins(input) {
 	const s = String(input || "").trim();
 	if (!s) return [];
 	return s.split(",").map((x) => x.trim()).filter(Boolean);
 }
-const ALLOWED_ORIGINS = parseOrigins(FRONTEND_URL);
+
+// Lijst van toegestane origins, inclusief de Framer preview URL
+const BASE_ORIGINS = [
+	(process.env.FRONTEND_URL || "").replace(/\/$/, ""),
+	(process.env.PUBLIC_BASE_URL || "").replace(/\/$/, ""),
+	// Toevoeging om Framer preview fout te fixen
+	'https://screenshot.framer.invalid',
+	// Voor lokale ontwikkeling:
+	'http://localhost:3000',
+	'http://localhost:4000',
+].filter(Boolean);
+
+const ALLOWED_ORIGINS = parseOrigins(BASE_ORIGINS.join(','));
+
 
 app.use(
 	cors({
 		origin: (origin, cb) => {
 			if (!origin) return cb(null, true);
-			if (ALLOWED_ORIGINS.length === 0) return cb(null, true);
+			// Controleer of de origin is toegestaan
 			if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
 			return cb(new Error("CORS blocked for origin: " + origin));
 		},
