@@ -41,19 +41,16 @@ if (!PUBLIC_BASE_URL)
 if (JWT_SECRET === "change-me-in-env")
 	console.warn("⚠️ Set a strong JWT_SECRET in env");
 
-/* ------------ NODEMAILER SETUP ------------ */
-
-// 2. Nodemailer Transporter Configuratie
-// We controleren of de poort 465 is. Zo ja, dan gebruiken we 'secure: true' (SSL).
-const isSecure = process.env.EMAIL_PORT === '465';
+/* ------------ NODEMAILER SETUP (Poort 587) ------------ */
 
 // Dit maakt de verbinding met de SMTP-server van uw e-mailprovider
+// (Bijv. SendGrid: smtp.sendgrid.net)
 const transporter = nodemailer.createTransport({
 	host: process.env.EMAIL_HOST,
-	port: process.env.EMAIL_PORT || 587,
-	secure: isSecure, // Gebruikt true voor 465, false voor 587
+	port: 587, // Geforceerd op 587
+	secure: false, // BELANGRIJK: 'false' voor poort 587 (gebruikt STARTTLS)
 	auth: {
-		user: process.env.EMAIL_USER,
+		user: process.env.EMAIL_USER, // Typisch 'apikey' voor SendGrid
 		pass: process.env.EMAIL_PASS,
 	},
 });
