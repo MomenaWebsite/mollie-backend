@@ -59,7 +59,7 @@ const transporter = nodemailer.createTransport({
 async function sendResetEmail(userEmail, resetLink) {
 	// Gebruik het hardcoded, geverifieerde e-mailadres
 	// OPMERKING: Dit adres MOET geverifieerd zijn in SendGrid
-	const senderEmail = "info@momena.nl"; 
+	const senderEmail = "info@momena.nl"; 
 
 	const mailOptions = {
 		// Gebruik het geverifieerde adres info@momena.nl als afzender
@@ -509,6 +509,7 @@ app.post("/api/forgot-password", async (req, res) => {
 		});
 
 		// 3. Stuur e-mail met reset link
+		// DEZE LIJN IS AANGEPAST om de 'email' parameter toe te voegen (vereist door front-end component)
 		const resetLink = `${resetPageUrl}?token=${resetToken}&email=${encodeURIComponent(
 			email
 		)}`;
@@ -532,6 +533,7 @@ app.post("/api/reset-password", async (req, res) => {
 	try {
 		const { token, email, newPassword } = req.body || {};
 		if (!token || !email || !newPassword) {
+			// Vang de fout op die de front-end meldt
 			return res
 				.status(400)
 				.json({ error: "Token, e-mail en wachtwoord zijn vereist" });
