@@ -53,6 +53,8 @@ const transporter = nodemailer.createTransport({
 /* ------------ NODEMAILER FUNCTIES ------------ */
 
 const SENDER_EMAIL = "info@momena.nl"; // Hardcoded, geverifieerd e-mailadres
+// NIEUW: Intern e-mailadres voor orderbevestigingen
+const INTERNAL_ORDER_EMAIL = "bestellingen@momena.nl"; 
 
 // Functie om de reset-e-mail te versturen
 async function sendResetEmail(userEmail, resetLink) {
@@ -61,7 +63,7 @@ async function sendResetEmail(userEmail, resetLink) {
 		to: userEmail,
 		subject: 'Wachtwoord Resetten voor uw account',
 		html: `
-            <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+            <div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; margin: auto;">
                 <p>Hallo,</p>
                 <p>U ontvangt deze e-mail omdat u een verzoek heeft ingediend om uw wachtwoord te resetten.</p>
                 <p>Klik op de onderstaande knop om uw wachtwoord te wijzigen. Deze link is slechts één uur geldig.</p>
@@ -96,7 +98,7 @@ async function sendOrderConfirmationEmail(payment) {
 
 	if (!customer || !customer.email) {
 		console.error("[EMAIL FOUT] Geen e-mailadres van klant in metadata.");
-		return;
+		// Blijf versturen naar intern adres, zelfs als klant e-mail mist (cruciale aanpassing)
 	}
 
 	// Bouw de HTML voor de productenlijst
@@ -149,11 +151,18 @@ async function sendOrderConfirmationEmail(payment) {
             <td style="padding: 8px 0; text-align: right; font-weight: bold; color: #0a7f2e;">- &euro; ${discount.toFixed(2).replace('.', ',')}</td>
         </tr>
     ` : '';
+    
+    // Bepaal de ontvangerslijst
+    const recipients = [INTERNAL_ORDER_EMAIL];
+    if (customer && customer.email) {
+        recipients.unshift(customer.email); // Plaats klant bovenaan als hoofdontvanger
+    }
 
 	const mailOptions = {
 		from: `"${process.env.EMAIL_SENDER_NAME || 'Momena'}" <${SENDER_EMAIL}>`,
-		to: customer.email,
-		subject: `Bevestiging van uw bestelling #${payment.metadata.orderId}`,
+		// AANPASSING: Stuur naar KLANT EN INTERN adres
+		to: recipients.join(', '), 
+		subject: `Bestelbevestiging #${payment.metadata.orderId} (Klant: ${customer?.firstName || 'Onbekend'} ${customer?.lastName || 'Onbekend'})`,
 		html: `
             <div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px;">
                 <h2 style="color: #333;">Bedankt voor uw bestelling!</h2>
@@ -183,10 +192,10 @@ async function sendOrderConfirmationEmail(payment) {
                 </table>
                 
                 <h3 style="color: #333; margin-top: 30px;">Uw Gegevens (Afzender)</h3>
-                <p style="margin: 5px 0; font-size: 14px;"><strong>Naam:</strong> ${customer.firstName} ${customer.lastName}</p>
-                <p style="margin: 5px 0; font-size: 14px;"><strong>Adres:</strong> ${customer.streetAndNumber}, ${customer.postalCode} ${customer.city}, ${customer.country}</p>
-                <p style="margin: 5px 0; font-size: 14px;"><strong>E-mail:</strong> ${customer.email}</p>
-                <p style="margin: 5px 0; font-size: 14px;"><strong>Telefoon:</strong> ${customer.phone}</p>
+                <p style="margin: 5px 0; font-size: 14px;"><strong>Naam:</strong> ${customer?.firstName || ''} ${customer?.lastName || ''}</p>
+                <p style="margin: 5px 0; font-size: 14px;"><strong>Adres:</strong> ${customer?.streetAndNumber || ''}, ${customer?.postalCode || ''} ${customer?.city || ''}, ${customer?.country || ''}</p>
+                <p style="margin: 5px 0; font-size: 14px;"><strong>E-mail:</strong> ${customer?.email || ''}</p>
+                <p style="margin: 5px 0; font-size: 14px;"><strong>Telefoon:</strong> ${customer?.phone || ''}</p>
 
                 <p style="margin-top: 30px;">Wij houden u op de hoogte! Bedankt voor uw aankoop.</p>
                 <p style="font-size: 12px; color: #888;">&copy; ${new Date().getFullYear()} Momena. Alle rechten voorbehouden.</p>
@@ -196,9 +205,9 @@ async function sendOrderConfirmationEmail(payment) {
 
 	try {
 		await transporter.sendMail(mailOptions);
-		console.log(`[EMAIL] Orderbevestiging succesvol voor ${customer.email} klaargezet.`);
+		console.log(`[EMAIL] Orderbevestiging succesvol verstuurd naar ${recipients.join(', ')}.`);
 	} catch (error) {
-		console.error(`[EMAIL FOUT] Kon orderbevestiging naar ${customer.email} niet verzenden:`, error);
+		console.error(`[EMAIL FOUT] Kon orderbevestiging niet verzenden:`, error);
 	}
 }
 
@@ -685,11 +694,11 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 		const sender = req.body?.sender || null;
 		const senderPrefs = req.body?.senderPrefs || {};
 		const orderId = req.body?.orderId || `order_${Date.now()}`;
-		const discount = Number(req.body?.discount) || 0; // <-- PAK DE KORTING
+		const discount = Number(req.body?.discount) || 0;
 
 		const catalog = loadCatalog();
-		const subTotal = calcTotal(items, catalog); // Totaalbedrag vóór korting
-		const finalTotal = Math.max(0, subTotal - discount); // Totaalbedrag voor Mollie
+		const subTotal = calcTotal(items, catalog);
+		const finalTotal = Math.max(0, subTotal - discount);
 
 		if (!finalTotal || finalTotal <= 0) {
 			return res.status(400).json({ error: "Cart is empty or invalid" });
@@ -703,13 +712,12 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 		const description = `Order ${orderId} – ${items.length} items`;
 
 		const payment = await mollie("/payments", "POST", {
-			amount: { currency: "EUR", value: finalTotal.toFixed(2) }, // Gebruik finalTotal
+			amount: { currency: "EUR", value: finalTotal.toFixed(2) },
 			description,
 			redirectUrl: `${FRONTEND_URL}/bedankt?orderId=${encodeURIComponent(
 				orderId
 			)}`,
 			webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
-			// VOEG DISCOUNT TOE AAN METADATA
 			metadata: { orderId, items, sender, senderPrefs, discount: discount },
 		});
 
@@ -752,7 +760,7 @@ app.post("/api/mollie/webhook", async (req, res) => {
 				}
 				stockAdjustedOrders.add(orderId);
 				
-				// NIEUW: STUUR ORDERBEVESTIGING E-MAIL
+				// STUUR ORDERBEVESTIGING E-MAIL naar klant EN intern adres
 				await sendOrderConfirmationEmail(payment); 
 			}
 		}
