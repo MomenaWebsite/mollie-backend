@@ -57,10 +57,12 @@ const transporter = nodemailer.createTransport({
 
 // 3. Functie om de reset-e-mail te versturen
 async function sendResetEmail(userEmail, resetLink) {
-	// Gebruik de EMAIL_USER of een fallback als afzender
-	const senderEmail = process.env.EMAIL_USER || "info@uwdomein.nl";
+	// Gebruik het hardcoded, geverifieerde e-mailadres
+	// OPMERKING: Dit adres MOET geverifieerd zijn in SendGrid
+	const senderEmail = "info@momena.nl"; 
 
 	const mailOptions = {
+		// Gebruik het geverifieerde adres info@momena.nl als afzender
 		from: `"${process.env.EMAIL_SENDER_NAME || 'Wachtwoord Service'}" <${senderEmail}>`,
 		to: userEmail,
 		subject: 'Wachtwoord Resetten voor uw account',
