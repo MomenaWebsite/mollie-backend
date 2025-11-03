@@ -1,6 +1,6 @@
 /**
- * Cart + Mollie Payments backend — met persistente Accounts (JWT + Prisma/Postgres)
- */
+ * Cart + Mollie Payments backend — met persistente Accounts (JWT + Prisma/Postgres)
+ */
 try {
 	require("dotenv").config();
 } catch {}
@@ -26,9 +26,6 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 
 /* ------------ ENV ------------ */
-// LET OP: U moet de logica voor e-mail verzenden implementeren,
-// of op zijn minst een service zoals Nodemailer of SendGrid instellen.
-// ZONDER E-MAIL IMPLEMENTATIE zal de link alleen in uw console verschijnen.
 const MOLLIE_API_KEY = process.env.MOLLIE_API_KEY;
 const FRONTEND_URL = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
@@ -43,8 +40,6 @@ if (JWT_SECRET === "change-me-in-env")
 
 /* ------------ NODEMAILER SETUP (Poort 587) ------------ */
 
-// Dit maakt de verbinding met de SMTP-server van uw e-mailprovider
-// (Bijv. SendGrid: smtp.sendgrid.net)
 const transporter = nodemailer.createTransport({
 	host: process.env.EMAIL_HOST,
 	port: 587, // Geforceerd op 587
@@ -55,32 +50,31 @@ const transporter = nodemailer.createTransport({
 	},
 });
 
-// 3. Functie om de reset-e-mail te versturen
-async function sendResetEmail(userEmail, resetLink) {
-	// Gebruik het hardcoded, geverifieerde e-mailadres
-	// OPMERKING: Dit adres MOET geverifieerd zijn in SendGrid
-	const senderEmail = "info@momena.nl"; 
+/* ------------ NODEMAILER FUNCTIES ------------ */
 
+const SENDER_EMAIL = "info@momena.nl"; // Hardcoded, geverifieerd e-mailadres
+
+// Functie om de reset-e-mail te versturen
+async function sendResetEmail(userEmail, resetLink) {
 	const mailOptions = {
-		// Gebruik het geverifieerde adres info@momena.nl als afzender
-		from: `"${process.env.EMAIL_SENDER_NAME || 'Wachtwoord Service'}" <${senderEmail}>`,
+		from: `"${process.env.EMAIL_SENDER_NAME || 'Wachtwoord Service'}" <${SENDER_EMAIL}>`,
 		to: userEmail,
 		subject: 'Wachtwoord Resetten voor uw account',
 		html: `
-            <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-                <p>Hallo,</p>
-                <p>U ontvangt deze e-mail omdat u een verzoek heeft ingediend om uw wachtwoord te resetten.</p>
-                <p>Klik op de onderstaande knop om uw wachtwoord te wijzigen. Deze link is slechts één uur geldig.</p>
-                <div style="margin: 20px 0;">
-                    <a href="${resetLink}" 
-                        style="display: inline-block; padding: 10px 20px; color: #ffffff; background-color: #007bff; border-radius: 5px; text-decoration: none; font-weight: bold;"
-                    >
-                        Wachtwoord Resetten
-                    </a>
-                </div>
-                <p>Als u dit niet heeft aangevraagd, kunt u deze e-mail negeren. Uw wachtwoord zal dan ongewijzigd blijven.</p>
-            </div>
-        `,
+            <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+                <p>Hallo,</p>
+                <p>U ontvangt deze e-mail omdat u een verzoek heeft ingediend om uw wachtwoord te resetten.</p>
+                <p>Klik op de onderstaande knop om uw wachtwoord te wijzigen. Deze link is slechts één uur geldig.</p>
+                <div style="margin: 20px 0;">
+                    <a href="${resetLink}" 
+                        style="display: inline-block; padding: 10px 20px; color: #ffffff; background-color: #007bff; border-radius: 5px; text-decoration: none; font-weight: bold;"
+                    >
+                        Wachtwoord Resetten
+                    </a>
+                </div>
+                <p>Als u dit niet heeft aangevraagd, kunt u deze e-mail negeren. Uw wachtwoord zal dan ongewijzigd blijven.</p>
+            </div>
+        `,
 	};
 
 	try {
@@ -88,7 +82,123 @@ async function sendResetEmail(userEmail, resetLink) {
 		console.log(`[EMAIL] Reset e-mail succesvol voor ${userEmail} klaargezet.`);
 	} catch (error) {
 		console.error(`[EMAIL FOUT] Kon e-mail naar ${userEmail} niet verzenden:`, error);
-		// We loggen de fout, maar laten de API respons OK zijn om de gebruiker geen interne fouten te tonen.
+	}
+}
+
+// NIEUW: Functie om de orderbevestiging te versturen
+async function sendOrderConfirmationEmail(payment) {
+	const catalog = loadCatalog();
+	const totalPaid = Number(payment?.amount?.value) || 0;
+	const items = extractItemsFromMetadata(payment.metadata);
+	const customer = payment.metadata.sender;
+	const discount = Number(payment.metadata.discount) || 0;
+	const subTotal = totalPaid + discount; // Subtotaal is betaald + korting
+
+	if (!customer || !customer.email) {
+		console.error("[EMAIL FOUT] Geen e-mailadres van klant in metadata.");
+		return;
+	}
+
+	// Bouw de HTML voor de productenlijst
+	const itemRows = items.map(item => {
+		const product = catalog.find(p => p.id === item.id);
+		const itemPrice = product?.price || 0;
+		const totalLine = (item.qty * itemPrice).toFixed(2).replace('.', ',');
+		const name = product?.name || item.id;
+
+		// Specifieke verzendinformatie voor individuele items
+		let shippingInfo = '';
+		if (item.sendNow) {
+			// Individueel verstuurde items
+			shippingInfo = `
+                <p style="margin: 4px 0 0 0; font-size: 12px; color: #555;">
+                    Verstuurd naar: ${item.shipping.firstName} ${item.shipping.lastName}
+                </p>
+                <p style="margin: 2px 0 0 0; font-size: 12px; color: #555;">
+                    Adres: ${item.shipping.streetAndNumber}, ${item.shipping.postalCode} ${item.shipping.city}
+                </p>
+                <p style="margin: 2px 0 0 0; font-size: 12px; color: #555;">
+                    Gewenste aankomst: ${item.shipping.deliveryDate}
+                </p>
+            `;
+			if (item.note) {
+				shippingInfo += `<p style="margin: 2px 0 0 0; font-size: 12px; color: #555;">Bericht: ${item.note}</p>`;
+			}
+		} else if (item.qty > 0 && !item.sendNow) {
+			// Bulk items (gaan naar afzender/klant)
+			shippingInfo = `<p style="margin: 4px 0 0 0; font-size: 12px; color: #555;">Wordt in bulk naar uw adres verstuurd.</p>`;
+		}
+
+		return `
+            <tr>
+                <td style="padding: 8px 0; border-bottom: 1px solid #eee;">
+                    ${item.qty} x ${name}
+                    ${shippingInfo}
+                </td>
+                <td style="padding: 8px 0; border-bottom: 1px solid #eee; text-align: right;">
+                    &euro; ${totalLine}
+                </td>
+            </tr>
+        `;
+	}).join('');
+
+	// Totaal sectie
+	const discountRow = discount > 0 ? `
+        <tr>
+            <td style="padding: 8px 0; text-align: right; font-weight: bold; color: #0a7f2e;">Korting</td>
+            <td style="padding: 8px 0; text-align: right; font-weight: bold; color: #0a7f2e;">- &euro; ${discount.toFixed(2).replace('.', ',')}</td>
+        </tr>
+    ` : '';
+
+	const mailOptions = {
+		from: `"${process.env.EMAIL_SENDER_NAME || 'Momena'}" <${SENDER_EMAIL}>`,
+		to: customer.email,
+		subject: `Bevestiging van uw bestelling #${payment.metadata.orderId}`,
+		html: `
+            <div style="font-family: Arial, sans-serif; line-height: 1.6; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px;">
+                <h2 style="color: #333;">Bedankt voor uw bestelling!</h2>
+                <p>Uw bestelling met nummer <strong>${payment.metadata.orderId}</strong> is succesvol betaald. Hieronder vindt u een overzicht:</p>
+
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 20px; border-collapse: collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left; padding-bottom: 10px; border-bottom: 2px solid #333;">Product</th>
+                            <th style="text-align: right; padding-bottom: 10px; border-bottom: 2px solid #333;">Totaal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${itemRows}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td style="padding: 8px 0; text-align: right;">Subtotaal</td>
+                            <td style="padding: 8px 0; text-align: right;">&euro; ${subTotal.toFixed(2).replace('.', ',')}</td>
+                        </tr>
+                        ${discountRow}
+                        <tr>
+                            <td style="padding: 10px 0; border-top: 2px solid #333; font-weight: bold; font-size: 18px; text-align: right;">Totaal Betaald</td>
+                            <td style="padding: 10px 0; border-top: 2px solid #333; font-weight: bold; font-size: 18px; text-align: right;">&euro; ${totalPaid.toFixed(2).replace('.', ',')}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+                
+                <h3 style="color: #333; margin-top: 30px;">Uw Gegevens (Afzender)</h3>
+                <p style="margin: 5px 0; font-size: 14px;"><strong>Naam:</strong> ${customer.firstName} ${customer.lastName}</p>
+                <p style="margin: 5px 0; font-size: 14px;"><strong>Adres:</strong> ${customer.streetAndNumber}, ${customer.postalCode} ${customer.city}, ${customer.country}</p>
+                <p style="margin: 5px 0; font-size: 14px;"><strong>E-mail:</strong> ${customer.email}</p>
+                <p style="margin: 5px 0; font-size: 14px;"><strong>Telefoon:</strong> ${customer.phone}</p>
+
+                <p style="margin-top: 30px;">Wij houden u op de hoogte! Bedankt voor uw aankoop.</p>
+                <p style="font-size: 12px; color: #888;">&copy; ${new Date().getFullYear()} Momena. Alle rechten voorbehouden.</p>
+            </div>
+        `,
+	};
+
+	try {
+		await transporter.sendMail(mailOptions);
+		console.log(`[EMAIL] Orderbevestiging succesvol voor ${customer.email} klaargezet.`);
+	} catch (error) {
+		console.error(`[EMAIL FOUT] Kon orderbevestiging naar ${customer.email} niet verzenden:`, error);
 	}
 }
 
@@ -509,14 +619,10 @@ app.post("/api/forgot-password", async (req, res) => {
 		});
 
 		// 3. Stuur e-mail met reset link
-		// DEZE LIJN IS AANGEPAST om de 'email' parameter toe te voegen (vereist door front-end component)
 		const resetLink = `${resetPageUrl}?token=${resetToken}&email=${encodeURIComponent(
 			email
 		)}`;
 		
-		// --- HIER MOET U UW E-MAIL LOGICA PLAATSEN ---
-		
-		// Vervang de console.log door de Nodemailer functie aanroep:
 		await sendResetEmail(email, resetLink);
 
 		res.json({
@@ -533,7 +639,6 @@ app.post("/api/reset-password", async (req, res) => {
 	try {
 		const { token, email, newPassword } = req.body || {};
 		if (!token || !email || !newPassword) {
-			// Vang de fout op die de front-end meldt
 			return res
 				.status(400)
 				.json({ error: "Token, e-mail en wachtwoord zijn vereist" });
@@ -580,11 +685,13 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 		const sender = req.body?.sender || null;
 		const senderPrefs = req.body?.senderPrefs || {};
 		const orderId = req.body?.orderId || `order_${Date.now()}`;
+		const discount = Number(req.body?.discount) || 0; // <-- PAK DE KORTING
 
 		const catalog = loadCatalog();
-		const total = calcTotal(items, catalog);
+		const subTotal = calcTotal(items, catalog); // Totaalbedrag vóór korting
+		const finalTotal = Math.max(0, subTotal - discount); // Totaalbedrag voor Mollie
 
-		if (!total || total <= 0) {
+		if (!finalTotal || finalTotal <= 0) {
 			return res.status(400).json({ error: "Cart is empty or invalid" });
 		}
 
@@ -596,13 +703,14 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 		const description = `Order ${orderId} – ${items.length} items`;
 
 		const payment = await mollie("/payments", "POST", {
-			amount: { currency: "EUR", value: total.toFixed(2) },
+			amount: { currency: "EUR", value: finalTotal.toFixed(2) }, // Gebruik finalTotal
 			description,
 			redirectUrl: `${FRONTEND_URL}/bedankt?orderId=${encodeURIComponent(
 				orderId
 			)}`,
 			webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
-			metadata: { orderId, items, sender, senderPrefs },
+			// VOEG DISCOUNT TOE AAN METADATA
+			metadata: { orderId, items, sender, senderPrefs, discount: discount },
 		});
 
 		if (payment?.metadata?.orderId && payment?.id) {
@@ -612,7 +720,7 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 		const checkoutUrl = payment?._links?.checkout?.href;
 		if (!checkoutUrl) throw new Error("No checkout URL from Mollie");
 
-		res.json({ checkoutUrl, paymentId: payment.id, orderId, total });
+		res.json({ checkoutUrl, paymentId: payment.id, orderId, total: finalTotal });
 	} catch (err) {
 		console.error(err);
 		res.status(500).json({ error: "Failed to create payment" });
@@ -643,6 +751,9 @@ app.post("/api/mollie/webhook", async (req, res) => {
 					console.log(`📦 Voorraad bijgewerkt voor ${orderId}`);
 				}
 				stockAdjustedOrders.add(orderId);
+				
+				// NIEUW: STUUR ORDERBEVESTIGING E-MAIL
+				await sendOrderConfirmationEmail(payment); 
 			}
 		}
 
