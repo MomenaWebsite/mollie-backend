@@ -714,9 +714,8 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 		const payment = await mollie("/payments", "POST", {
 			amount: { currency: "EUR", value: finalTotal.toFixed(2) },
 			description,
-			redirectUrl: `${FRONTEND_URL}/bedankt?orderId=${encodeURIComponent(
-				orderId
-			)}`,
+			// Redirect naar Framer 'bedankt' pagina
+			redirectUrl: `https://momenatest.framer.website/bedankt?orderId=${encodeURIComponent(orderId)}`,
 			webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
 			metadata: { orderId, items, sender, senderPrefs, discount: discount },
 		});
@@ -791,6 +790,68 @@ app.get("/api/payment-status", async (req, res) => {
 		res.status(500).json({ error: "Failed to fetch status" });
 	}
 });
+
+/* --------- Order details (for Thank You page) ---------- */
+app.get("/api/order-details", async (req, res) => {
+    try {
+        const orderId = String(req.query.orderId || "").trim()
+        if (!orderId) return res.status(400).json({ error: "orderId required" })
+
+        // Vind paymentId uit geheugen; indien niet aanwezig: fout teruggeven
+        const paymentId = paymentIdByOrderId.get(orderId)
+        if (!paymentId) {
+            return res.status(404).json({ error: "Order niet gevonden" })
+        }
+
+        // Haal payment op bij Mollie (bevat metadata → items, sender, discount)
+        const payment = await mollie(`/payments/${paymentId}`, "GET")
+        const status = payment?.status || "unknown"
+        const metadata = payment?.metadata || {}
+        const items = extractItemsFromMetadata(metadata)
+        const sender = metadata?.sender || null
+        const discount = Number(metadata?.discount) || 0
+
+        // Verrijk met catalogus voor prijs en naam
+        const catalog = loadCatalog()
+        const enrichedItems = (items || []).map((it) => {
+            const p = catalog.find((x) => String(x.id) === String(it.id))
+            const price = Number(p?.price || 0)
+            const name = p ? p.name : String(it.id)
+            const image = p?.image || null
+            const qty = Math.max(0, Number(it.qty || 0))
+            const lineTotal = Number((price * qty).toFixed(2))
+            return {
+                id: it.id,
+                name,
+                price,
+                image,
+                qty,
+                lineTotal,
+                sendNow: !!it.sendNow,
+                note: it.note || undefined,
+                shipping: it.shipping || undefined,
+                attachedCandles: it.attachedCandles || undefined,
+            }
+        })
+
+        const subTotal = enrichedItems.reduce((sum, it) => sum + it.lineTotal, 0)
+        const total = Math.max(0, Number((subTotal - discount).toFixed(2)))
+
+        res.json({
+            orderId,
+            paymentId,
+            status,
+            sender,
+            discount,
+            subTotal,
+            total,
+            items: enrichedItems,
+        })
+    } catch (e) {
+        console.error("Order details error:", e)
+        res.status(500).json({ error: "Failed to load order details" })
+    }
+})
 
 app.listen(PORT, () => {
 	console.log(`✅ Server on :${PORT}`);
