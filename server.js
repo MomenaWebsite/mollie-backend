@@ -30,6 +30,7 @@ const MOLLIE_API_KEY = process.env.MOLLIE_API_KEY;
 const FRONTEND_URL = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-env";
+const POSTNL_API_KEY = process.env.POSTNL_API_KEY || "b5b9d0a9-f874-45bf-b9d0-a9f87425bf47";
 
 if (!MOLLIE_API_KEY) console.warn("⚠️ Missing MOLLIE_API_KEY");
 if (!FRONTEND_URL) console.warn("⚠️ Missing FRONTEND_URL");
@@ -463,6 +464,55 @@ app.get("/api/products", (_req, res) => {
 	res.json({ products: catalog });
 });
 
+/* --------- PostNL Shipping ---------- */
+// Bereken verzendkosten
+app.post("/api/calculate-shipping", async (req, res) => {
+	try {
+		const { method, postalCode, city, country, items } = req.body || {};
+		if (!method || !postalCode || !city) {
+			return res.status(400).json({ error: "Verzendmethode, postcode en stad zijn verplicht" });
+		}
+
+		// Voor nu: simpele berekening (kan later worden vervangen door PostNL Shipping API)
+		// PostNL Shipping API vereist: gewicht, afmetingen, bestemming
+		// Voor nu gebruiken we een vaste prijs per verzending
+		const baseShippingCost = 6.95; // Basis verzendkosten voor NL
+		
+		// TODO: Vervang dit door echte PostNL Shipping API call
+		// PostNL Shipping API endpoint: https://api.postnl.nl/shipment/v2_2/calculate/shipment
+		
+		res.json({ cost: baseShippingCost });
+	} catch (e) {
+		console.error("Verzendkosten berekenen mislukt:", e);
+		res.status(500).json({ error: "Kon verzendkosten niet berekenen" });
+	}
+});
+
+// PostNL helper: maak shipment aan
+async function createPostNLShipment(shipmentData) {
+	try {
+		// PostNL Shipping API endpoint
+		const response = await fetch("https://api.postnl.nl/shipment/v2_2/shipment", {
+			method: "POST",
+			headers: {
+				"apikey": POSTNL_API_KEY,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(shipmentData),
+		});
+		
+		if (!response.ok) {
+			const text = await response.text();
+			throw new Error(`PostNL API error: ${response.status} - ${text}`);
+		}
+		
+		return await response.json();
+	} catch (e) {
+		console.error("PostNL shipment creation mislukt:", e);
+		throw e;
+	}
+}
+
 /* --------- AUTH: signup/login/me/logout + profiel opslaan ---------- */
 app.post("/api/signup", async (req, res) => {
 	try {
@@ -695,10 +745,12 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 		const senderPrefs = req.body?.senderPrefs || {};
 		const orderId = req.body?.orderId || `order_${Date.now()}`;
 		const discount = Number(req.body?.discount) || 0;
+		const shippingCost = Number(req.body?.shippingCost) || 0;
+		const shippingMethod = req.body?.shippingMethod || null;
 
 		const catalog = loadCatalog();
 		const subTotal = calcTotal(items, catalog);
-		const finalTotal = Math.max(0, subTotal - discount);
+		const finalTotal = Math.max(0, subTotal - discount + shippingCost);
 
 		if (!finalTotal || finalTotal <= 0) {
 			return res.status(400).json({ error: "Cart is empty or invalid" });
@@ -717,7 +769,7 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 			// Redirect naar Framer 'bedankt' pagina met orderId in de URL
 			redirectUrl: `https://momenatest.framer.website/bedankt?orderId=${encodeURIComponent(orderId)}`,
 			webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
-			metadata: { orderId, items, sender, senderPrefs, discount: discount },
+			metadata: { orderId, items, sender, senderPrefs, discount: discount, shippingMethod: shippingMethod, shippingCost: shippingCost },
 		});
 
 		if (payment?.metadata?.orderId && payment?.id) {
@@ -760,7 +812,65 @@ app.post("/api/mollie/webhook", async (req, res) => {
 				stockAdjustedOrders.add(orderId);
 				
 				// STUUR ORDERBEVESTIGING E-MAIL naar klant EN intern adres
-				await sendOrderConfirmationEmail(payment); 
+				await sendOrderConfirmationEmail(payment);
+				
+				// POSTNL: Maak shipments aan voor items die direct verstuurd worden
+				const sender = payment.metadata?.sender || null;
+				const shippingMethod = payment.metadata?.shippingMethod || null;
+				
+				// Maak PostNL shipments voor items met sendNow: true
+				for (const item of items) {
+					if (item.sendNow && item.shipping) {
+						try {
+							const shipmentData = {
+								Customer: {
+									Address: {
+										AddressType: "01", // Thuis
+										FirstName: item.shipping.firstName || "",
+										Name: item.shipping.lastName || "",
+										Street: item.shipping.streetAndNumber?.split(/\s+/)[0] || "",
+										HouseNr: item.shipping.streetAndNumber?.split(/\s+/).slice(1).join(" ") || "",
+										Zipcode: item.shipping.postalCode?.replace(/\s+/g, "") || "",
+										City: item.shipping.city || "",
+										Countrycode: item.shipping.country?.toUpperCase() || "NL",
+									},
+								},
+								Message: {
+									Printertype: "GraphicFile|PDF",
+									MessageID: `${orderId}-${item.id}-${Date.now()}`,
+									MessageTimeStamp: new Date().toISOString(),
+								},
+								Shipments: [
+									{
+										Addresses: [
+											{
+												AddressType: "01",
+												FirstName: item.shipping.firstName || "",
+												Name: item.shipping.lastName || "",
+												Street: item.shipping.streetAndNumber?.split(/\s+/)[0] || "",
+												HouseNr: item.shipping.streetAndNumber?.split(/\s+/).slice(1).join(" ") || "",
+												Zipcode: item.shipping.postalCode?.replace(/\s+/g, "") || "",
+												City: item.shipping.city || "",
+												Countrycode: item.shipping.country?.toUpperCase() || "NL",
+											},
+										],
+										ContactPerson: item.shipping.firstName || "",
+										Dimension: {
+											Weight: 500, // gram (standaard voor kaarten)
+										},
+										ProductCodeDelivery: "3085", // Thuis bezorgen
+									},
+								],
+							};
+							
+							const postnlResult = await createPostNLShipment(shipmentData);
+							console.log(`📮 PostNL shipment aangemaakt voor ${orderId} - item ${item.id}:`, postnlResult?.ResponseShipments?.[0]?.Barcode || "geen barcode");
+						} catch (e) {
+							console.error(`❌ PostNL shipment mislukt voor ${orderId} - item ${item.id}:`, e.message);
+							// Blijf doorgaan met andere shipments
+						}
+					}
+				}
 			}
 		}
 
