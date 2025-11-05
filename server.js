@@ -714,8 +714,8 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 		const payment = await mollie("/payments", "POST", {
 			amount: { currency: "EUR", value: finalTotal.toFixed(2) },
 			description,
-			// Redirect naar Framer 'bedankt' pagina (zonder query params)
-			redirectUrl: `https://momenatest.framer.website/bedankt`,
+			// Redirect naar Framer 'bedankt' pagina met orderId in de URL
+			redirectUrl: `https://momenatest.framer.website/bedankt?orderId=${encodeURIComponent(orderId)}`,
 			webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
 			metadata: { orderId, items, sender, senderPrefs, discount: discount },
 		});
