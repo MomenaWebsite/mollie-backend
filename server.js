@@ -286,7 +286,7 @@ function normalizeProduct(p) {
 
 	return {
 		id: String(p.id),
-		name: String(p.name),
+		name: String(p.name || "").replace(/-/g, " "),
 		price,
 		image: p.image || undefined,
 		stock,
