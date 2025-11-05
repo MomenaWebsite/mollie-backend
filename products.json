@@ -4,6 +4,7 @@
   "name": "Dino-Feest-Ballonnen",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/Y4glmvAxyERDRRr7GQZ4AKRaUhc.jpg?scale-down-to=1024&width=2148&height=2712",
+  "weight": 29,
   "stock": 53
   },
   {
@@ -11,6 +12,7 @@
   "name": "Dino-Feest-Hapje-Taart",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/u58aK2EqGzc4ZE22n9DRRPq0nk.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 50
   },
   {
@@ -18,6 +20,7 @@
   "name": "Dino-Feest-Cadeau",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/k720BxufaaLBF9JQxKkY62jMw.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 48
   },
   {
@@ -25,6 +28,7 @@
   "name": "Dino-Feest-Confetti",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/S1HWha5qDdVRFbiq2rGw3B5VOk.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 50
   },
   {
@@ -32,6 +36,7 @@
   "name": "Dino-Feest-Taart",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/Lmo4OUi1E04RFkkeAOQrmDqhXc.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 57
   },
   {
@@ -39,6 +44,7 @@
   "name": "Turtle-Party-Ballonnen",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/ZTGodomoRzuGmsFneRCflw9Ahs.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 47
   },
   {
@@ -46,6 +52,7 @@
   "name": "Turtle-Party-Cake",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/VzQskuEb9dQKjk9TheRzy4EQI2M.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 48
   },
   {
@@ -53,6 +60,7 @@
   "name": "Turtle-Party-Hoed",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/iadBFYzCh7z8drvCz3jxg5Aec.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 51
   },
   {
@@ -60,6 +68,7 @@
   "name": "Turtle-Party-Cadeau",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/UoJtRoCV4nZRrNjx9EYWRxW06qM.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 47
   },
   {
@@ -67,6 +76,7 @@
   "name": "Turtle-Party-Slingers",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/yVu4R5sBylDXQtDGdPXgLUSB0o.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 53
   },
   {
@@ -74,6 +84,7 @@
   "name": "Boerderij-Ballonnen-Varken",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/mdfd43k1Vr5GGVfV3PD3NrdcI.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 48
   },
   {
@@ -81,6 +92,7 @@
   "name": "Boerderij-Ballonnen-Kuiken",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/fqPeJFSwxheLCbXa0pk5C7eJE.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 54
   },
   {
@@ -88,6 +100,7 @@
   "name": "Boerderij-Ballonnen-Konijn",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/2gUCW2zcjjL8bqwG1Ls2RsqKvs.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 51
   },
   {
@@ -95,6 +108,7 @@
   "name": "Boerderij-Ballonnen-Koe",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/YfN3gY65YtfEFX9HPWdkQYQs.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 55
   },
   {
@@ -102,6 +116,7 @@
   "name": "Boerderij-Ballonnen-Geit",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/bJHJQJNilReKOnLOgKze3HoEYj4.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 52
   },
   {
@@ -109,6 +124,7 @@
   "name": "Bundeltje-Geluk-Blauw",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/OdCIazL12QMK49UeND1rLiPtjRI.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 58
   },
   {
@@ -116,6 +132,7 @@
   "name": "Bundeltje-Geluk-Tweeling-BR",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/BZamjQwuJtpzFQUMPyit7KacFZc.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 52
   },
   {
@@ -123,6 +140,7 @@
   "name": "Bundeltje-Geluk-Roze",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/OdCIazL12QMK49UeND1rLiPtjRI.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 59
   },
   {
@@ -130,6 +148,7 @@
   "name": "Bundeltje-Geluk-Roze-1",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/tfJ3iOQbnyxJEYHtp7mJKLCjaI.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 59
   },
   {
@@ -137,6 +156,7 @@
   "name": "Bundeltje-Geluk-Blauw-1",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/jBxJZTKVajsZMbwMBNZvHqXkUM.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 54
   },
   {
@@ -144,6 +164,7 @@
   "name": "Bundeltje-Geluk-Tweeling-Blauw",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/GxJzgSkqzyo7BNAbwa8zDlY8E.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 60
   },
   {
@@ -151,6 +172,7 @@
   "name": "Bundeltje-Geluk-Tweeling-Roze",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/ESgHHUzWTsy80W4oNKHXMFuFZ4U.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 60
   },
   {
@@ -158,6 +180,7 @@
   "name": "Kikkerop-Fruitmand",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/6P1ZNgagp6v61cKR1AvD7K3H6c.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 11
   },
   {
@@ -165,6 +188,7 @@
   "name": "Kikkerop-Groot",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/DP8HheuEge3oDvWAJIBX1B04EYY.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 13
   },
   {
@@ -172,6 +196,7 @@
   "name": "Kikkerop-Pleisters",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/hCwDzeptLPcIINfToOABYZC8.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 10
   },
   {
@@ -179,6 +204,7 @@
   "name": "Kikkerop-Veel",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/J2Nx185OO2E0ItUIvJGx1PAsB4.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 13
   },
   {
@@ -186,6 +212,7 @@
   "name": "Kikkerop-Zuster",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/YwTWAsQTpd3u5HyGnzKOEZOjPrE.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 11
   },
   {
@@ -193,6 +220,7 @@
   "name": "Brakke-Slak-Duizelig",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/A6x0yaOzzIHdpSWBohxi3kKU6NM.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 27
   },
   {
@@ -200,6 +228,7 @@
   "name": "Brakke-Slak-Thermometer",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/2qTqs9vHdGHNc1ViHxHIjcKaTU.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 27
   },
   {
@@ -207,6 +236,7 @@
   "name": "Brakke-Slak-Tissues",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/8dCxHszm2rgbGC6ZWR9j8IRxcE.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 27
   },
   {
@@ -214,6 +244,7 @@
   "name": "Brakke-Slak-Pleisters",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/v2aCuJvkRQpAE0FDQ47lyn4qHv8.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 27
   },
   {
@@ -221,6 +252,7 @@
   "name": "Brakke-Slak-Kruik",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/2rwbyc09ec1joBljdaZv6tNdOM.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 27
   },
   {
@@ -228,6 +260,7 @@
   "name": "Cactus-Kerst-Gemberkoek",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/ALS7lzP3JO53z4ykSKhTbb04Y.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 46
   },
   {
@@ -235,6 +268,7 @@
   "name": "Cactus-Kerst-Lichtjes",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/rnNmCxkMUa1UNYPeIdcQVvT4J74.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 44
   },
   {
@@ -242,6 +276,7 @@
   "name": "Cactus-Kerst-Kerstman",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/bqUIjyl6w3U1emovF2gmFduPLo.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 48
   },
   {
@@ -249,6 +284,7 @@
   "name": "Cactus-Kerst-Rendier",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/HZYvYeaiTVqqSOj2FsWDdwW8.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 51
   },
   {
@@ -256,6 +292,7 @@
   "name": "Cactus-Kerst-Sneeuwpop",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/1OnkGYQw8oIdqOn99A3Eo9QBfk.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 43
   },
   {
@@ -263,6 +300,7 @@
   "name": "Geen-Gezicht-Elf",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/HLjv7rqjbK8kp8FrQku00c8Ou0I.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 47
   },
   {
@@ -270,6 +308,7 @@
   "name": "Geen-Gezicht-Gemberkoek",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/JZwqxPgPZJJUf4QKEXIGsTRoAzk.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 51
   },
   {
@@ -277,6 +316,7 @@
   "name": "Geen-Gezicht-Rendier",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/JxXldh42h9n6gN32vUE9T608.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 55
   },
   {
@@ -284,6 +324,7 @@
   "name": "Geen-Gezicht-Kerstman",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/SwoKeZGVOBzu9ZSfHaYilpXUIBU.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 51
   },
   {
@@ -291,6 +332,7 @@
   "name": "Geen-Gezicht-Sneeuwpop",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/3o1F7ZPNGRtWq6uvc53C53Qie4U.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 51
   },
   {
@@ -298,6 +340,7 @@
   "name": "Grumpy-Cat-Engel",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/vsNuMhtHY1bpexJsaw8GQqNPs4k.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 50
   },
   {
@@ -305,6 +348,7 @@
   "name": "Grumpy-Cat-Kerstboom",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/wVACKoRJqbBKuxux18JhqdD0.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 49
   },
   {
@@ -312,6 +356,7 @@
   "name": "Grumpy-Cat-Lichtjes",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/57Ldgpgs0YHAUAJ8zSon0LGISw.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 47
   },
   {
@@ -319,6 +364,7 @@
   "name": "Grumpy-Cat-Sneeuwpop",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/JEKLaBNYKEK40olX0rTdQu2c2Q.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 48
   },
   {
@@ -326,6 +372,7 @@
   "name": "Grumpy-Cat-Stocking",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/LeL5pnbbXbcrv0sI1BCDUdwtJ7M.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 49
   },
   {
@@ -333,6 +380,7 @@
   "name": "Kerstpatroon-Bel",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/09UzcR10CoI9A2iy5u5VnIwzU.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 49
   },
   {
@@ -340,6 +388,7 @@
   "name": "Kerstpatroon-Kerstboom",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/i7A2mLhxnof4R2IsZYOiXIcKgs.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 50
   },
   {
@@ -347,6 +396,7 @@
   "name": "Kerstpatroon-Kerstmuts",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/SRdNo3kMhQWGM9MnZuzaZXCI2b8.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 47
   },
   {
@@ -354,6 +404,7 @@
   "name": "Kerstpatroon-Rendier",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/nogEWxfSOSBeITHryu3TX3B3ZM.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 44
   },
   {
@@ -361,6 +412,7 @@
   "name": "Kerstpatroon-Zuurstok",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/s3TIiefhk7LbyqgUqDSar0N4uLM.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 48
   },
   {
@@ -368,6 +420,7 @@
   "name": "SnowAngel-Ijsbeer",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/h78msH2hyUNFQqlCP12cqnq9vg.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 60
   },
   {
@@ -375,6 +428,7 @@
   "name": "SnowAngel-Luiaard",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/3B3IG6pJZRMPeCG0IMl7qqlqEM0.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 71
   },
   {
@@ -382,6 +436,7 @@
   "name": "SnowAngel-Otter",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/iNEfeMO9Epy6288KatwiMTkm1M.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 56
   },
   {
@@ -389,6 +444,7 @@
   "name": "SnowAngel-RodePanda",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/1rQoQBC2avd4OFOfnMEeFmfSfIA.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 43
   },
   {
@@ -396,6 +452,7 @@
   "name": "SnowAngel-Wasbeer",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/5VXJo8aKZP29iDUWYMuw7GT7h8.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 59
   },
   {
@@ -403,6 +460,7 @@
   "name": "Wonderlijk-Cadeaus",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/oRCuNzNBVnrqM9les08Nug0XTaU.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 47
   },
   {
@@ -410,6 +468,7 @@
   "name": "Wonderlijk-Gemberkoek",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/6DiV67WhCRKIdc2PDZiJEhi3l7M.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 49
   },
   {
@@ -417,6 +476,7 @@
   "name": "Wonderlijk-Kerstboom",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/UoOE7lcf29vNKC9J5XmUKyOq3ZQ.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 51
   },
   {
@@ -424,6 +484,7 @@
   "name": "Wonderlijk-Sneeuwpop",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/6bmhGAf88OhWjWic1KDS2Gfi5sI.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 49
   },
   {
@@ -431,6 +492,7 @@
   "name": "Wonderlijk-TeddyBear",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/XioaydIyUEfaC8p2Ct1rlVRn04.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 47
   },
   {
@@ -438,6 +500,7 @@
   "name": "Liefdes-Hart",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/NV2YtKixN878GJ08P08m70OPaY.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 51
   },
   {
@@ -445,6 +508,7 @@
   "name": "Lemon-Vibes-Surfen",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/RvhQvPN2tUmNkHtXbL4zx4BIeIc.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 27
   },
   {
@@ -452,6 +516,7 @@
   "name": "Lemon-Vibes-Stoel",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/eEPptU0GTwZphCOlbliX6vTIg0.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 27
   },
   {
@@ -459,6 +524,7 @@
   "name": "Lemon-Vibes-Strand",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/8cT1DXjiE1aVZx6PJyMptmppvtM.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 27
   },
   {
@@ -466,6 +532,7 @@
   "name": "Lemon-Vibes-Zwembad",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/yNQ1oOi9wETo762gBqqt0GL20NU.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 27
   },
   {
@@ -473,6 +540,7 @@
   "name": "Lemon-Vibes-Zwemband",
   "price": 3.50,
   "image": "https://framerusercontent.com/images/Ivkuqs42vA4D6ba7L58xN0K8.jpg?width=2148&height=2712",
+  "weight": 29,
   "stock": 27
   },
   {
@@ -480,6 +548,7 @@
   "name": "Espresso-Martini-Kaars",
   "price": 19.99,
   "image": "https://framerusercontent.com/images/eh3Y2nhwvXru6WRHdyZfaN5Q4.jpg?width=1024&height=1536",
+  "weight": 550,
   "stock": 5
   },
   {
@@ -487,6 +556,7 @@
   "name": "Latte-Macchiato-Kaars",
   "price": 19.99,
   "image": "https://framerusercontent.com/images/7SlLnIQPmnd86qzfWgS3fo5l730.jpg?width=1024&height=1536",
+  "weight": 600,
   "stock": 0
   },
   {
@@ -494,6 +564,7 @@
   "name": "Citroen-Kaars",
   "price": 9.99,
   "image": "https://framerusercontent.com/images/Mt12oBnQTBkw8oscMBqAxkP5o.png?width=1024&height=1536",
+  "weight": 100,
   "stock": 2
   }
   ]
