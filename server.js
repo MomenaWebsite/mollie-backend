@@ -1180,6 +1180,7 @@ app.post("/api/calculate-shipping", async (req, res) => {
 
 		// PostNL Shipping API: Calculate Shipment
 		// Gebruik PostNL API om verzendkosten te berekenen op basis van gewicht
+		// Let op: Deze endpoint werkt mogelijk alleen met een geldige PostNL account
 		try {
 			const calculateResponse = await fetch("https://api.postnl.nl/shipment/v2_2/calculate/shipment", {
 				method: "POST",
@@ -1236,22 +1237,37 @@ app.post("/api/calculate-shipping", async (req, res) => {
 // PostNL helper: maak shipment aan
 async function createPostNLShipment(shipmentData) {
 	try {
-		// PostNL Shipping API endpoint
-		const response = await fetch("https://api.postnl.nl/shipment/v2_2/shipment", {
+		// PostNL Shipping API endpoint - gebruik de juiste base URL
+		// Let op: PostNL API vereist mogelijk een andere endpoint structuur
+		const apiUrl = "https://api.postnl.nl/shipment/v2_2/shipment";
+		
+		console.log(`📦 PostNL API call naar: ${apiUrl}`);
+		console.log(`📦 PostNL shipment data:`, JSON.stringify(shipmentData, null, 2));
+		
+		const response = await fetch(apiUrl, {
 			method: "POST",
 			headers: {
 				"apikey": POSTNL_API_KEY,
 				"Content-Type": "application/json",
+				"Accept": "application/json",
 			},
 			body: JSON.stringify(shipmentData),
 		});
 		
+		const responseText = await response.text();
+		console.log(`📦 PostNL API response status: ${response.status}`);
+		console.log(`📦 PostNL API response:`, responseText);
+		
 		if (!response.ok) {
-			const text = await response.text();
-			throw new Error(`PostNL API error: ${response.status} - ${text}`);
+			throw new Error(`PostNL API error: ${response.status} - ${responseText}`);
 		}
 		
-		return await response.json();
+		try {
+			return JSON.parse(responseText);
+		} catch (parseError) {
+			console.error("⚠️ Kon PostNL response niet parsen als JSON:", parseError);
+			throw new Error(`PostNL API response is geen geldige JSON: ${responseText}`);
+		}
 	} catch (e) {
 		console.error("PostNL shipment creation mislukt:", e);
 		throw e;
@@ -1262,6 +1278,12 @@ async function createPostNLShipment(shipmentData) {
 async function generatePostNLLabels({ orderId, sender, items, shippingAddresses = [] }) {
 	if (!POSTNL_API_KEY) {
 		console.error("⚠️ POSTNL_API_KEY ontbreekt, kan geen labels genereren");
+		return null;
+	}
+
+	// Controleer of sender en items aanwezig zijn
+	if (!sender || !items || items.length === 0) {
+		console.error("⚠️ Sender of items ontbreken, kan geen labels genereren");
 		return null;
 	}
 
@@ -1276,7 +1298,14 @@ async function generatePostNLLabels({ orderId, sender, items, shippingAddresses 
 			return sum + (itemWeight * qty);
 		}, 0);
 
+		// Valideer sender gegevens
+		if (!sender?.postalCode || !sender?.city) {
+			console.error("⚠️ Sender postcode of stad ontbreekt, kan geen labels genereren");
+			return null;
+		}
+
 		// Maak shipment data voor PostNL
+		// Let op: PostNL API vereist mogelijk een specifieke data structuur
 		const shipmentData = {
 			Shipments: [
 				{
