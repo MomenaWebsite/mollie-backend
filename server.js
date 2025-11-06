@@ -1113,32 +1113,37 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 
     const description = `Order ${orderId} – ${items.length} items`;
 
-    // Gebruik gecomprimeerde mollieMeta als beschikbaar (max 100 bytes)
-    // Anders gebruik de volledige metadata
+    // Sla altijd de volledige metadata op voor gebruik in webhook/e-mails
+    // Voeg ook gecomprimeerde metadata toe voor Mollie's 100 bytes limiet
     const mollieMeta = req.body?.mollieMeta;
-    let metadata;
     
+    // Volledige metadata voor webhook en e-mails
+    const fullMetadata = { 
+      orderId, 
+      items, 
+      sender, 
+      senderPrefs, 
+      discount: discountAmount, 
+      shippingCost 
+    };
+    
+    // Metadata voor Mollie: voeg gecomprimeerde versie toe als extra veld
+    const metadata = { ...fullMetadata };
     if (mollieMeta && typeof mollieMeta === 'string') {
-      // mollieMeta is een gecomprimeerde JSON string (max 100 bytes)
-      // Gebruik het direct als metadata veld (Mollie accepteert strings in metadata)
-      // Voeg orderId toe voor tracking
-      try {
-        // Probeer te parsen om te valideren dat het geldige JSON is
-        const parsed = JSON.parse(mollieMeta);
-        // Gebruik de gecomprimeerde string direct als 'order' veld
-        // Dit zorgt ervoor dat het onder de 100 bytes limiet blijft
-        metadata = { 
-          orderId, // orderId is nodig voor tracking
-          order: mollieMeta // Gecomprimeerde data (max 100 bytes)
-        };
-      } catch (e) {
-        // Als parsing faalt, gebruik de string direct
-        metadata = { orderId, order: mollieMeta };
-      }
-    } else {
-      // Fallback naar volledige metadata als mollieMeta niet beschikbaar is
-      metadata = { orderId, items, sender, senderPrefs, discount: discountAmount, shippingCost };
+      // Voeg gecomprimeerde metadata toe als extra veld voor Mollie's limiet
+      metadata.mollieMeta = mollieMeta;
     }
+
+    // Debug logging om te zien wat er wordt opgeslagen
+    console.log(`📦 Metadata voor payment ${orderId}:`, {
+      orderId,
+      itemsCount: items.length,
+      hasSender: !!sender,
+      discount: discountAmount,
+      shippingCost,
+      hasMollieMeta: !!metadata.mollieMeta,
+      metadataSize: JSON.stringify(metadata).length,
+    });
 
     const payment = await mollie("/payments", "POST", {
       amount: { currency: "EUR", value: total.toFixed(2) },
@@ -1149,6 +1154,9 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
       webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
       metadata: metadata,
     });
+    
+    // Debug logging om te zien wat Mollie heeft opgeslagen
+    console.log(`📦 Payment aangemaakt voor ${orderId}, metadata in payment:`, payment.metadata);
 
     if (payment?.metadata?.orderId && payment?.id) {
       paymentIdByOrderId.set(payment.metadata.orderId, payment.id);
@@ -1198,11 +1206,28 @@ app.post("/api/mollie/webhook", async (req, res) => {
       ) {
         try {
           const metadata = payment.metadata;
+          
+          // Debug logging om te zien wat er in de metadata zit
+          console.log(`🔍 Metadata voor ${orderId}:`, JSON.stringify(metadata, null, 2));
+          
           const items = extractItemsFromMetadata(metadata);
           const sender = metadata.sender || null;
           const discount = Number(metadata.discount || 0);
           const shippingCost = Number(metadata.shippingCost || 0);
           const paymentAmount = Number(payment.amount?.value || 0);
+
+          // Debug logging om te zien wat er wordt geëxtraheerd
+          console.log(`🔍 Items geëxtraheerd:`, items.length, "items");
+          console.log(`🔍 Sender:`, sender ? `${sender.firstName} ${sender.lastName}` : "geen sender");
+          console.log(`🔍 Discount:`, discount);
+          console.log(`🔍 Shipping cost:`, shippingCost);
+
+          if (!items || items.length === 0) {
+            console.error(`⚠️ Geen items gevonden in metadata voor ${orderId}`);
+          }
+          if (!sender) {
+            console.error(`⚠️ Geen sender gevonden in metadata voor ${orderId}`);
+          }
 
           await sendOrderConfirmationEmails({
             orderId,
@@ -1217,6 +1242,7 @@ app.post("/api/mollie/webhook", async (req, res) => {
           console.log(`📧 Orderbevestigings e-mails verzonden voor ${orderId}`);
         } catch (emailError) {
           console.error(`❌ Orderbevestigings e-mails mislukt voor ${orderId}:`, emailError);
+          console.error(`❌ Error details:`, emailError.stack);
           // Voeg niet toe aan emailsSentOrders zodat het opnieuw kan worden geprobeerd
         }
       }
