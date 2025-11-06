@@ -27,11 +27,13 @@ const PORT = process.env.PORT || 3000;
 // of op zijn minst een service zoals Nodemailer of SendGrid instellen.
 // ZONDER E-MAIL IMPLEMENTATIE zal de link alleen in uw console verschijnen.
 const MOLLIE_API_KEY = process.env.MOLLIE_API_KEY;
+const POSTNL_API_KEY = process.env.POSTNL_API_KEY;
 const FRONTEND_URL = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-env";
 
 if (!MOLLIE_API_KEY) console.warn("⚠️ Missing MOLLIE_API_KEY");
+if (!POSTNL_API_KEY) console.warn("⚠️ Missing POSTNL_API_KEY");
 if (!FRONTEND_URL) console.warn("⚠️ Missing FRONTEND_URL");
 if (!PUBLIC_BASE_URL)
   console.warn("⚠️ Missing PUBLIC_BASE_URL (webhookUrl may be invalid)");
@@ -628,6 +630,33 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 
     const description = `Order ${orderId} – ${items.length} items`;
 
+    // Gebruik gecomprimeerde mollieMeta als beschikbaar (max 100 bytes)
+    // Anders gebruik de volledige metadata
+    const mollieMeta = req.body?.mollieMeta;
+    let metadata;
+    
+    if (mollieMeta && typeof mollieMeta === 'string') {
+      // mollieMeta is een gecomprimeerde JSON string (max 100 bytes)
+      // Gebruik het direct als metadata veld (Mollie accepteert strings in metadata)
+      // Voeg orderId toe voor tracking
+      try {
+        // Probeer te parsen om te valideren dat het geldige JSON is
+        const parsed = JSON.parse(mollieMeta);
+        // Gebruik de gecomprimeerde string direct als 'order' veld
+        // Dit zorgt ervoor dat het onder de 100 bytes limiet blijft
+        metadata = { 
+          orderId, // orderId is nodig voor tracking
+          order: mollieMeta // Gecomprimeerde data (max 100 bytes)
+        };
+      } catch (e) {
+        // Als parsing faalt, gebruik de string direct
+        metadata = { orderId, order: mollieMeta };
+      }
+    } else {
+      // Fallback naar volledige metadata als mollieMeta niet beschikbaar is
+      metadata = { orderId, items, sender, senderPrefs };
+    }
+
     const payment = await mollie("/payments", "POST", {
       amount: { currency: "EUR", value: total.toFixed(2) },
       description,
@@ -635,7 +664,7 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
         orderId
       )}`,
       webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
-      metadata: { orderId, items, sender, senderPrefs },
+      metadata: metadata,
     });
 
     if (payment?.metadata?.orderId && payment?.id) {
