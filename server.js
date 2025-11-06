@@ -520,16 +520,20 @@ async function sendOrderConfirmationEmails({ orderId, items, sender, total, disc
     minute: "2-digit",
   });
 
-  // Maak een lijst van bestelde items met details
+  // Maak een lijst van bestelde items met alle details
   const itemsList = items
     .map((item) => {
       const product = catalog.find((p) => p.id === item.id);
       const productName = product?.name || item.id;
       const productPrice = product?.price || 0;
+      const productId = item.id || "";
+      const productImage = product?.image || "";
       const qty = item.qty || 1;
       const itemTotal = productPrice * qty;
       return {
+        id: productId,
         name: productName,
+        image: productImage,
         qty,
         price: productPrice,
         total: itemTotal,
@@ -576,19 +580,43 @@ async function sendOrderConfirmationEmails({ orderId, items, sender, total, disc
         <tbody>
           ${itemsList
             .map(
-              (item) => `
+              (item) => {
+                // Haal productnamen op voor attached candles
+                const attachedCandlesInfo = item.attachedCandles && item.attachedCandles.length > 0
+                  ? item.attachedCandles.map((c) => {
+                      const candleProduct = catalog.find((p) => p.id === c.id);
+                      const candleName = candleProduct?.name || c.id;
+                      return `${c.qty}x ${candleName}`;
+                    }).join(", ")
+                  : "";
+                
+                return `
             <tr>
               <td style="padding: 10px; border-bottom: 1px solid #eee;">
-                ${item.name}
-                ${item.note ? `<br><small style="color: #666;">Bericht: ${item.note}</small>` : ""}
-                ${item.sendNow && item.shipping ? `<br><small style="color: #666;">Direct verzenden naar: ${item.shipping.firstName} ${item.shipping.lastName}, ${item.shipping.city}</small>` : ""}
-                ${item.attachedCandles && item.attachedCandles.length > 0 ? `<br><small style="color: #666;">Met kaars(en): ${item.attachedCandles.map((c) => `${c.qty}x ${c.id}`).join(", ")}</small>` : ""}
+                ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; margin-right: 10px; vertical-align: middle; float: left;" />` : ""}
+                <div style="${item.image ? "margin-left: 70px;" : ""}">
+                  <strong>${item.name}</strong>
+                  <br><small style="color: #999;">Product ID: ${item.id}</small>
+                  ${item.note ? `<br><br><small style="color: #666;"><strong>Bericht op kaart:</strong> ${item.note}</small>` : ""}
+                  ${item.sendNow && item.shipping ? `
+                    <br><br><small style="color: #666;"><strong>Direct verzenden naar:</strong><br>
+                      ${item.shipping.firstName || ""} ${item.shipping.lastName || ""}<br>
+                      ${item.shipping.streetAndNumber || ""}<br>
+                      ${item.shipping.postalCode || ""} ${item.shipping.city || ""}<br>
+                      ${item.shipping.country || ""}
+                      ${item.shipping.deliveryDate ? `<br><strong>Gewenste aankomstdatum:</strong> ${item.shipping.deliveryDate}` : ""}
+                    </small>
+                  ` : ""}
+                  ${attachedCandlesInfo ? `<br><br><small style="color: #666;"><strong>Gekoppelde kaars(en):</strong> ${attachedCandlesInfo}</small>` : ""}
+                </div>
+                <div style="clear: both;"></div>
               </td>
-              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee;">${item.qty}</td>
-              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee;">€${item.price.toFixed(2)}</td>
-              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee;">€${item.total.toFixed(2)}</td>
+              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee; vertical-align: top;">${item.qty}</td>
+              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee; vertical-align: top;">€${item.price.toFixed(2)}</td>
+              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee; vertical-align: top;">€${item.total.toFixed(2)}</td>
             </tr>
-          `
+          `;
+              }
             )
             .join("")}
         </tbody>
@@ -666,25 +694,43 @@ async function sendOrderConfirmationEmails({ orderId, items, sender, total, disc
         <tbody>
           ${itemsList
             .map(
-              (item) => `
+              (item) => {
+                // Haal productnamen op voor attached candles
+                const attachedCandlesInfo = item.attachedCandles && item.attachedCandles.length > 0
+                  ? item.attachedCandles.map((c) => {
+                      const candleProduct = catalog.find((p) => p.id === c.id);
+                      const candleName = candleProduct?.name || c.id;
+                      return `${c.qty}x ${candleName}`;
+                    }).join(", ")
+                  : "";
+                
+                return `
             <tr>
               <td style="padding: 10px; border-bottom: 1px solid #eee;">
-                ${item.name}
-                ${item.note ? `<br><small style="color: #666;"><strong>Bericht:</strong> ${item.note}</small>` : ""}
-                ${item.sendNow && item.shipping ? `<br><small style="color: #666;"><strong>Direct verzenden naar:</strong><br>
-                  ${item.shipping.firstName} ${item.shipping.lastName}<br>
-                  ${item.shipping.streetAndNumber || ""}<br>
-                  ${item.shipping.postalCode || ""} ${item.shipping.city || ""}<br>
-                  ${item.shipping.country || ""}
-                  ${item.shipping.deliveryDate ? `<br><strong>Gewenste aankomstdatum:</strong> ${item.shipping.deliveryDate}` : ""}
-                </small>` : ""}
-                ${item.attachedCandles && item.attachedCandles.length > 0 ? `<br><small style="color: #666;"><strong>Met kaars(en):</strong> ${item.attachedCandles.map((c) => `${c.qty}x ${c.id}`).join(", ")}</small>` : ""}
+                ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; margin-right: 10px; vertical-align: middle; float: left;" />` : ""}
+                <div style="${item.image ? "margin-left: 70px;" : ""}">
+                  <strong>${item.name}</strong>
+                  <br><small style="color: #999;">Product ID: ${item.id}</small>
+                  ${item.note ? `<br><br><small style="color: #666;"><strong>Bericht op kaart:</strong> ${item.note}</small>` : ""}
+                  ${item.sendNow && item.shipping ? `
+                    <br><br><small style="color: #666;"><strong>Direct verzenden naar:</strong><br>
+                      ${item.shipping.firstName || ""} ${item.shipping.lastName || ""}<br>
+                      ${item.shipping.streetAndNumber || ""}<br>
+                      ${item.shipping.postalCode || ""} ${item.shipping.city || ""}<br>
+                      ${item.shipping.country || ""}
+                      ${item.shipping.deliveryDate ? `<br><strong>Gewenste aankomstdatum:</strong> ${item.shipping.deliveryDate}` : ""}
+                    </small>
+                  ` : ""}
+                  ${attachedCandlesInfo ? `<br><br><small style="color: #666;"><strong>Gekoppelde kaars(en):</strong> ${attachedCandlesInfo}</small>` : ""}
+                </div>
+                <div style="clear: both;"></div>
               </td>
-              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee;">${item.qty}</td>
-              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee;">€${item.price.toFixed(2)}</td>
-              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee;">€${item.total.toFixed(2)}</td>
+              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee; vertical-align: top;">${item.qty}</td>
+              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee; vertical-align: top;">€${item.price.toFixed(2)}</td>
+              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee; vertical-align: top;">€${item.total.toFixed(2)}</td>
             </tr>
-          `
+          `;
+              }
             )
             .join("")}
         </tbody>
@@ -708,6 +754,81 @@ async function sendOrderConfirmationEmails({ orderId, items, sender, total, disc
     </html>
   `;
 
+  // Maak tekstversie van e-mail met alle productinformatie
+  const customerEmailText = `Bedankt voor je bestelling!
+
+Ordernummer: ${orderId}
+Besteldatum: ${orderDate}
+
+Je bestelling:
+${itemsList.map((item) => {
+  const attachedCandlesInfo = item.attachedCandles && item.attachedCandles.length > 0
+    ? item.attachedCandles.map((c) => {
+        const candleProduct = catalog.find((p) => p.id === c.id);
+        const candleName = candleProduct?.name || c.id;
+        return `${c.qty}x ${candleName}`;
+      }).join(", ")
+    : "";
+  
+  let itemText = `- ${item.name} (ID: ${item.id})\n  Aantal: ${item.qty} x €${item.price.toFixed(2)} = €${item.total.toFixed(2)}`;
+  if (item.note) itemText += `\n  Bericht op kaart: ${item.note}`;
+  if (item.sendNow && item.shipping) {
+    itemText += `\n  Direct verzenden naar:\n    ${item.shipping.firstName || ""} ${item.shipping.lastName || ""}\n    ${item.shipping.streetAndNumber || ""}\n    ${item.shipping.postalCode || ""} ${item.shipping.city || ""}\n    ${item.shipping.country || ""}`;
+    if (item.shipping.deliveryDate) itemText += `\n    Gewenste aankomstdatum: ${item.shipping.deliveryDate}`;
+  }
+  if (attachedCandlesInfo) itemText += `\n  Gekoppelde kaars(en): ${attachedCandlesInfo}`;
+  return itemText;
+}).join("\n\n")}
+
+Subtotaal: €${subtotal.toFixed(2)}
+${discount > 0 ? `Korting: -€${discount.toFixed(2)}\n` : ""}${shippingCost > 0 ? `Verzendkosten: €${shippingCost.toFixed(2)}\n` : ""}Totaal: €${finalTotal.toFixed(2)}
+
+Afleveradres:
+${sender?.firstName || ""} ${sender?.lastName || ""}
+${sender?.streetAndNumber || `${sender?.street || ""} ${sender?.number || ""}`.trim()}
+${sender?.postalCode || ""} ${sender?.city || ""}
+${sender?.country || ""}
+
+Je ontvangt een aparte e-mail zodra je bestelling is verzonden.`;
+
+  const adminEmailText = `Nieuwe bestelling ontvangen
+
+Ordernummer: ${orderId}
+Besteldatum: ${orderDate}
+Totaalbedrag: €${finalTotal.toFixed(2)}
+
+Afzender gegevens:
+Naam: ${sender?.firstName || ""} ${sender?.lastName || ""}
+E-mail: ${sender?.email || ""}
+Telefoon: ${sender?.phone || ""}
+Adres: ${sender?.streetAndNumber || `${sender?.street || ""} ${sender?.number || ""}`.trim()}
+Postcode: ${sender?.postalCode || ""}
+Plaats: ${sender?.city || ""}
+Land: ${sender?.country || ""}
+
+Bestelde producten:
+${itemsList.map((item) => {
+  const attachedCandlesInfo = item.attachedCandles && item.attachedCandles.length > 0
+    ? item.attachedCandles.map((c) => {
+        const candleProduct = catalog.find((p) => p.id === c.id);
+        const candleName = candleProduct?.name || c.id;
+        return `${c.qty}x ${candleName}`;
+      }).join(", ")
+    : "";
+  
+  let itemText = `- ${item.name} (ID: ${item.id})\n  Aantal: ${item.qty} x €${item.price.toFixed(2)} = €${item.total.toFixed(2)}`;
+  if (item.note) itemText += `\n  Bericht op kaart: ${item.note}`;
+  if (item.sendNow && item.shipping) {
+    itemText += `\n  Direct verzenden naar:\n    ${item.shipping.firstName || ""} ${item.shipping.lastName || ""}\n    ${item.shipping.streetAndNumber || ""}\n    ${item.shipping.postalCode || ""} ${item.shipping.city || ""}\n    ${item.shipping.country || ""}`;
+    if (item.shipping.deliveryDate) itemText += `\n    Gewenste aankomstdatum: ${item.shipping.deliveryDate}`;
+  }
+  if (attachedCandlesInfo) itemText += `\n  Gekoppelde kaars(en): ${attachedCandlesInfo}`;
+  return itemText;
+}).join("\n\n")}
+
+Subtotaal: €${subtotal.toFixed(2)}
+${discount > 0 ? `Korting: -€${discount.toFixed(2)}\n` : ""}${shippingCost > 0 ? `Verzendkosten: €${shippingCost.toFixed(2)}\n` : ""}Totaal: €${finalTotal.toFixed(2)}`;
+
   // Stuur e-mail naar klant
   if (sender?.email) {
     try {
@@ -715,7 +836,7 @@ async function sendOrderConfirmationEmails({ orderId, items, sender, total, disc
         to: sender.email,
         subject: `Orderbevestiging - ${orderId}`,
         html: customerEmailHtml,
-        text: `Bedankt voor je bestelling!\n\nOrdernummer: ${orderId}\nBesteldatum: ${orderDate}\n\nTotaal: €${finalTotal.toFixed(2)}\n\nJe ontvangt een aparte e-mail zodra je bestelling is verzonden.`,
+        text: customerEmailText,
       });
       console.log(`✅ Orderbevestiging verzonden naar klant: ${sender.email}`);
     } catch (emailError) {
@@ -729,7 +850,7 @@ async function sendOrderConfirmationEmails({ orderId, items, sender, total, disc
       to: "bestellingen@momena.nl",
       subject: `Nieuwe bestelling - ${orderId}`,
       html: adminEmailHtml,
-      text: `Nieuwe bestelling ontvangen\n\nOrdernummer: ${orderId}\nBesteldatum: ${orderDate}\nTotaal: €${finalTotal.toFixed(2)}\n\nAfzender: ${sender?.firstName || ""} ${sender?.lastName || ""} (${sender?.email || ""})`,
+      text: adminEmailText,
     });
     console.log(`✅ Orderbevestiging verzonden naar bestellingen@momena.nl`);
   } catch (emailError) {
@@ -972,10 +1093,14 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     const sender = req.body?.sender || null;
     const senderPrefs = req.body?.senderPrefs || {};
+    const discount = Number(req.body?.discount || 0);
     const orderId = req.body?.orderId || `order_${Date.now()}`;
 
     const catalog = loadCatalog();
-    const total = calcTotal(items, catalog);
+    const itemsTotal = calcTotal(items, catalog);
+    const discountAmount = Number(discount || 0);
+    const shippingCost = Number(req.body?.shippingCost || 0);
+    const total = Math.max(0, itemsTotal - discountAmount + shippingCost);
 
     if (!total || total <= 0) {
       return res.status(400).json({ error: "Cart is empty or invalid" });
@@ -1012,7 +1137,7 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
       }
     } else {
       // Fallback naar volledige metadata als mollieMeta niet beschikbaar is
-      metadata = { orderId, items, sender, senderPrefs };
+      metadata = { orderId, items, sender, senderPrefs, discount: discountAmount, shippingCost };
     }
 
     const payment = await mollie("/payments", "POST", {
@@ -1076,12 +1201,8 @@ app.post("/api/mollie/webhook", async (req, res) => {
           const items = extractItemsFromMetadata(metadata);
           const sender = metadata.sender || null;
           const discount = Number(metadata.discount || 0);
-          
-          // Bereken shipping cost uit payment amount en items
-          const catalog = loadCatalog();
-          const itemsTotal = calcTotal(items, catalog);
+          const shippingCost = Number(metadata.shippingCost || 0);
           const paymentAmount = Number(payment.amount?.value || 0);
-          const shippingCost = Math.max(0, paymentAmount - itemsTotal + discount);
 
           await sendOrderConfirmationEmails({
             orderId,
