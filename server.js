@@ -33,6 +33,7 @@ const EMAIL_USER = process.env.EMAIL_USER || "apikey";
 const EMAIL_HOST = process.env.EMAIL_HOST || "smtp.sendgrid.net";
 const EMAIL_PORT = process.env.EMAIL_PORT || "587";
 const EMAIL_SENDER_NAME = process.env.EMAIL_SENDER_NAME || "Momona";
+const EMAIL_FROM = process.env.EMAIL_FROM || "info@momena.nl"; // Geverifieerd e-mailadres in SendGrid
 const FRONTEND_URL = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-env";
@@ -40,6 +41,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-env";
 if (!MOLLIE_API_KEY) console.warn("⚠️ Missing MOLLIE_API_KEY");
 if (!POSTNL_API_KEY) console.warn("⚠️ Missing POSTNL_API_KEY");
 if (!EMAIL_PASS) console.warn("⚠️ Missing EMAIL_PASS (SendGrid API key)");
+console.log(`📧 E-mail wordt verzonden vanaf: ${EMAIL_FROM} (zorg dat dit e-mailadres geverifieerd is in SendGrid)`);
 if (!FRONTEND_URL) console.warn("⚠️ Missing FRONTEND_URL");
 if (!PUBLIC_BASE_URL)
   console.warn("⚠️ Missing PUBLIC_BASE_URL (webhookUrl may be invalid)");
@@ -435,10 +437,10 @@ async function sendEmailViaSendGrid({ to, subject, html, text }) {
     throw new Error("EMAIL_PASS (SendGrid API key) is niet geconfigureerd");
   }
 
-  // Gebruik een geverifieerd e-mailadres voor SendGrid
-  // Dit moet een e-mailadres zijn dat is geverifieerd in je SendGrid account
-  const fromEmail = process.env.EMAIL_FROM || process.env.EMAIL_SENDER_EMAIL || "noreply@momona.nl";
-  
+  if (!EMAIL_FROM || EMAIL_FROM.trim() === "") {
+    throw new Error("EMAIL_FROM is niet geconfigureerd. Dit moet een geverifieerd e-mailadres zijn in je SendGrid account. Zie: https://sendgrid.com/docs/for-developers/sending-email/sender-identity/");
+  }
+
   try {
     const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
       method: "POST",
@@ -454,7 +456,7 @@ async function sendEmailViaSendGrid({ to, subject, html, text }) {
           },
         ],
         from: {
-          email: fromEmail,
+          email: EMAIL_FROM,
           name: EMAIL_SENDER_NAME || "Momona",
         },
         content: [
@@ -472,8 +474,26 @@ async function sendEmailViaSendGrid({ to, subject, html, text }) {
 
     if (!response.ok) {
       const errorText = await response.text();
+      let errorMessage = `SendGrid API error: ${response.status}`;
+      
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData.errors && errorData.errors.length > 0) {
+          const firstError = errorData.errors[0];
+          errorMessage = `SendGrid API error: ${firstError.message || errorMessage}`;
+          
+          // Specifieke error voor niet-geverifieerd e-mailadres
+          if (firstError.message && firstError.message.includes("verified Sender Identity")) {
+            errorMessage = `SendGrid Error: Het e-mailadres "${EMAIL_FROM}" is niet geverifieerd in je SendGrid account. Verifieer dit e-mailadres eerst in je SendGrid dashboard. Zie: https://sendgrid.com/docs/for-developers/sending-email/sender-identity/`;
+          }
+        }
+      } catch (parseError) {
+        // Als parsing faalt, gebruik de originele error text
+        errorMessage = `SendGrid API error: ${response.status} - ${errorText}`;
+      }
+      
       console.error("SendGrid API error:", response.status, errorText);
-      throw new Error(`SendGrid API error: ${response.status}`);
+      throw new Error(errorMessage);
     }
 
     return true;
