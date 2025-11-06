@@ -28,12 +28,18 @@ const PORT = process.env.PORT || 3000;
 // ZONDER E-MAIL IMPLEMENTATIE zal de link alleen in uw console verschijnen.
 const MOLLIE_API_KEY = process.env.MOLLIE_API_KEY;
 const POSTNL_API_KEY = process.env.POSTNL_API_KEY;
+const EMAIL_PASS = process.env.EMAIL_PASS; // SendGrid API key
+const EMAIL_USER = process.env.EMAIL_USER || "apikey";
+const EMAIL_HOST = process.env.EMAIL_HOST || "smtp.sendgrid.net";
+const EMAIL_PORT = process.env.EMAIL_PORT || "587";
+const EMAIL_SENDER_NAME = process.env.EMAIL_SENDER_NAME || "Momona";
 const FRONTEND_URL = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-env";
 
 if (!MOLLIE_API_KEY) console.warn("⚠️ Missing MOLLIE_API_KEY");
 if (!POSTNL_API_KEY) console.warn("⚠️ Missing POSTNL_API_KEY");
+if (!EMAIL_PASS) console.warn("⚠️ Missing EMAIL_PASS (SendGrid API key)");
 if (!FRONTEND_URL) console.warn("⚠️ Missing FRONTEND_URL");
 if (!PUBLIC_BASE_URL)
   console.warn("⚠️ Missing PUBLIC_BASE_URL (webhookUrl may be invalid)");
@@ -423,6 +429,60 @@ app.put("/api/me", authRequired, async (req, res) => {
 
 /* --------- AUTH: Forgot Password / Reset Password ---------- */
 
+// SendGrid helper: stuur e-mail via SendGrid API
+async function sendEmailViaSendGrid({ to, subject, html, text }) {
+  if (!EMAIL_PASS) {
+    throw new Error("EMAIL_PASS (SendGrid API key) is niet geconfigureerd");
+  }
+
+  // Gebruik een geverifieerd e-mailadres voor SendGrid
+  // Dit moet een e-mailadres zijn dat is geverifieerd in je SendGrid account
+  const fromEmail = process.env.EMAIL_FROM || process.env.EMAIL_SENDER_EMAIL || "noreply@momona.nl";
+  
+  try {
+    const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${EMAIL_PASS}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        personalizations: [
+          {
+            to: [{ email: to }],
+            subject: subject,
+          },
+        ],
+        from: {
+          email: fromEmail,
+          name: EMAIL_SENDER_NAME || "Momona",
+        },
+        content: [
+          {
+            type: "text/plain",
+            value: text || html?.replace(/<[^>]*>/g, "") || "",
+          },
+          {
+            type: "text/html",
+            value: html || text || "",
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("SendGrid API error:", response.status, errorText);
+      throw new Error(`SendGrid API error: ${response.status}`);
+    }
+
+    return true;
+  } catch (e) {
+    console.error("SendGrid e-mail verzenden mislukt:", e);
+    throw e;
+  }
+}
+
 app.post("/api/forgot-password", async (req, res) => {
   try {
     const { email, resetPageUrl } = req.body || {};
@@ -449,16 +509,60 @@ app.post("/api/forgot-password", async (req, res) => {
       data: { resetToken, resetTokenExpires },
     });
 
-    // 3. Stuur e-mail met reset link
+    // 3. Stuur e-mail met reset link via SendGrid
     const resetLink = `${resetPageUrl}?token=${resetToken}&email=${encodeURIComponent(
       email
     )}`;
     
-    // --- HIER MOET U UW E-MAIL LOGICA PLAATSEN ---
-    // Voor nu loggen we de link:
-    console.log(`🔑 Wachtwoord Reset Token voor ${email}: ${resetToken}`);
-    console.log(`📧 Reset Link: ${resetLink}`);
-    // ----------------------------------------------
+    try {
+      await sendEmailViaSendGrid({
+        to: email,
+        subject: "Wachtwoord resetten",
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Wachtwoord resetten</title>
+          </head>
+          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #333;">Wachtwoord resetten</h2>
+            <p>Beste gebruiker,</p>
+            <p>U heeft een verzoek gedaan om uw wachtwoord te resetten. Klik op de onderstaande link om een nieuw wachtwoord in te stellen:</p>
+            <p style="margin: 30px 0;">
+              <a href="${resetLink}" style="background-color: #0070f3; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">Wachtwoord resetten</a>
+            </p>
+            <p>Of kopieer en plak deze link in uw browser:</p>
+            <p style="word-break: break-all; color: #666; font-size: 12px;">${resetLink}</p>
+            <p style="margin-top: 30px; color: #666; font-size: 12px;">
+              <strong>Let op:</strong> Deze link is 1 uur geldig. Als u dit verzoek niet heeft gedaan, kunt u deze e-mail negeren.
+            </p>
+            <p style="margin-top: 20px; color: #999; font-size: 11px;">
+              Als de knop niet werkt, kopieer en plak de bovenstaande link in uw browser.
+            </p>
+          </body>
+          </html>
+        `,
+        text: `
+          Wachtwoord resetten
+          
+          Beste gebruiker,
+          
+          U heeft een verzoek gedaan om uw wachtwoord te resetten. Gebruik de onderstaande link om een nieuw wachtwoord in te stellen:
+          
+          ${resetLink}
+          
+          Let op: Deze link is 1 uur geldig. Als u dit verzoek niet heeft gedaan, kunt u deze e-mail negeren.
+        `,
+      });
+      
+      console.log(`✅ Wachtwoord reset e-mail verzonden naar ${email}`);
+    } catch (emailError) {
+      console.error("❌ E-mail verzenden mislukt:", emailError);
+      // Stuur nog steeds een succesbericht om e-mail enumeratie te voorkomen
+      // Maar log de fout voor debugging
+    }
 
     res.json({
       ok: true,
