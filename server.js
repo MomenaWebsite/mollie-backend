@@ -623,18 +623,30 @@ async function sendOrderConfirmationEmails({ orderId, items, sender, total, disc
       </table>
 
       <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #333;">Kostenoverzicht:</h3>
         <table style="width: 100%;">
           <tr>
-            <td style="padding: 5px 0;"><strong>Subtotaal:</strong></td>
+            <td style="padding: 5px 0;"><strong>Subtotaal (producten):</strong></td>
             <td style="text-align: right; padding: 5px 0;">€${subtotal.toFixed(2)}</td>
           </tr>
-          ${discount > 0 ? `<tr><td style="padding: 5px 0;"><strong>Korting:</strong></td><td style="text-align: right; padding: 5px 0; color: #0a7f2e;">-€${discount.toFixed(2)}</td></tr>` : ""}
-          ${shippingCost > 0 ? `<tr><td style="padding: 5px 0;"><strong>Verzendkosten:</strong></td><td style="text-align: right; padding: 5px 0;">€${shippingCost.toFixed(2)}</td></tr>` : ""}
-          <tr style="border-top: 2px solid #333;">
-            <td style="padding: 10px 0 5px 0;"><strong>Totaal:</strong></td>
+          <tr>
+            <td style="padding: 5px 0;"><strong>Korting:</strong></td>
+            <td style="text-align: right; padding: 5px 0; color: ${discount > 0 ? '#0a7f2e' : '#333'};">
+              ${discount > 0 ? `-€${discount.toFixed(2)}` : '€0.00'}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 5px 0;"><strong>Verzendkosten:</strong></td>
+            <td style="text-align: right; padding: 5px 0;">€${shippingCost.toFixed(2)}</td>
+          </tr>
+          <tr style="border-top: 2px solid #333; margin-top: 10px;">
+            <td style="padding: 10px 0 5px 0;"><strong>Totaalbedrag:</strong></td>
             <td style="text-align: right; padding: 10px 0 5px 0; font-size: 18px; font-weight: bold;">€${finalTotal.toFixed(2)}</td>
           </tr>
         </table>
+        <p style="margin: 10px 0 0 0; font-size: 12px; color: #666;">
+          <em>Berekening: €${subtotal.toFixed(2)} ${discount > 0 ? `- €${discount.toFixed(2)}` : ''} ${shippingCost > 0 ? `+ €${shippingCost.toFixed(2)}` : ''} = €${finalTotal.toFixed(2)}</em>
+        </p>
       </div>
 
       <h3 style="color: #333; margin-top: 30px;">Afleveradres:</h3>
@@ -737,18 +749,30 @@ async function sendOrderConfirmationEmails({ orderId, items, sender, total, disc
       </table>
 
       <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #333;">Kostenoverzicht:</h3>
         <table style="width: 100%;">
           <tr>
-            <td style="padding: 5px 0;"><strong>Subtotaal:</strong></td>
+            <td style="padding: 5px 0;"><strong>Subtotaal (producten):</strong></td>
             <td style="text-align: right; padding: 5px 0;">€${subtotal.toFixed(2)}</td>
           </tr>
-          ${discount > 0 ? `<tr><td style="padding: 5px 0;"><strong>Korting:</strong></td><td style="text-align: right; padding: 5px 0; color: #0a7f2e;">-€${discount.toFixed(2)}</td></tr>` : ""}
-          ${shippingCost > 0 ? `<tr><td style="padding: 5px 0;"><strong>Verzendkosten:</strong></td><td style="text-align: right; padding: 5px 0;">€${shippingCost.toFixed(2)}</td></tr>` : ""}
-          <tr style="border-top: 2px solid #333;">
-            <td style="padding: 10px 0 5px 0;"><strong>Totaal:</strong></td>
+          <tr>
+            <td style="padding: 5px 0;"><strong>Korting:</strong></td>
+            <td style="text-align: right; padding: 5px 0; color: ${discount > 0 ? '#0a7f2e' : '#333'};">
+              ${discount > 0 ? `-€${discount.toFixed(2)}` : '€0.00'}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 5px 0;"><strong>Verzendkosten:</strong></td>
+            <td style="text-align: right; padding: 5px 0;">€${shippingCost.toFixed(2)}</td>
+          </tr>
+          <tr style="border-top: 2px solid #333; margin-top: 10px;">
+            <td style="padding: 10px 0 5px 0;"><strong>Totaalbedrag:</strong></td>
             <td style="text-align: right; padding: 10px 0 5px 0; font-size: 18px; font-weight: bold;">€${finalTotal.toFixed(2)}</td>
           </tr>
         </table>
+        <p style="margin: 10px 0 0 0; font-size: 12px; color: #666;">
+          <em>Berekening: €${subtotal.toFixed(2)} ${discount > 0 ? `- €${discount.toFixed(2)}` : ''} ${shippingCost > 0 ? `+ €${shippingCost.toFixed(2)}` : ''} = €${finalTotal.toFixed(2)}</em>
+        </p>
       </div>
     </body>
     </html>
@@ -780,8 +804,13 @@ ${itemsList.map((item) => {
   return itemText;
 }).join("\n\n")}
 
-Subtotaal: €${subtotal.toFixed(2)}
-${discount > 0 ? `Korting: -€${discount.toFixed(2)}\n` : ""}${shippingCost > 0 ? `Verzendkosten: €${shippingCost.toFixed(2)}\n` : ""}Totaal: €${finalTotal.toFixed(2)}
+Kostenoverzicht:
+Subtotaal (producten): €${subtotal.toFixed(2)}
+Korting: ${discount > 0 ? `-€${discount.toFixed(2)}` : '€0.00'}
+Verzendkosten: €${shippingCost.toFixed(2)}
+Totaalbedrag: €${finalTotal.toFixed(2)}
+
+Berekening: €${subtotal.toFixed(2)} ${discount > 0 ? `- €${discount.toFixed(2)}` : ''} ${shippingCost > 0 ? `+ €${shippingCost.toFixed(2)}` : ''} = €${finalTotal.toFixed(2)}
 
 Afleveradres:
 ${sender?.firstName || ""} ${sender?.lastName || ""}
@@ -826,8 +855,13 @@ ${itemsList.map((item) => {
   return itemText;
 }).join("\n\n")}
 
-Subtotaal: €${subtotal.toFixed(2)}
-${discount > 0 ? `Korting: -€${discount.toFixed(2)}\n` : ""}${shippingCost > 0 ? `Verzendkosten: €${shippingCost.toFixed(2)}\n` : ""}Totaal: €${finalTotal.toFixed(2)}`;
+Kostenoverzicht:
+Subtotaal (producten): €${subtotal.toFixed(2)}
+Korting: ${discount > 0 ? `-€${discount.toFixed(2)}` : '€0.00'}
+Verzendkosten: €${shippingCost.toFixed(2)}
+Totaalbedrag: €${finalTotal.toFixed(2)}
+
+Berekening: €${subtotal.toFixed(2)} ${discount > 0 ? `- €${discount.toFixed(2)}` : ''} ${shippingCost > 0 ? `+ €${shippingCost.toFixed(2)}` : ''} = €${finalTotal.toFixed(2)}`;
 
   // Stuur e-mail naar klant
   if (sender?.email) {
