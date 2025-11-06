@@ -504,6 +504,125 @@ async function sendEmailViaSendGrid({ to, subject, html, text }) {
   }
 }
 
+// Functie om verzendkosten opnieuw te berekenen met dezelfde logica als de frontend
+function recalculateShippingCost(items) {
+  const catalog = loadCatalog();
+  const SPECIFIC_CANDLES = [
+    "Citroen-Kaars",
+    "Latte-Macchiato-Kaars",
+    "Espresso-Martini-Kaars",
+  ];
+
+  // Tel bulk kaarten (niet kaarsen, niet direct verzonden)
+  let bulkCards = 0;
+  let directShipmentCards = 0;
+  items.forEach((item) => {
+    const product = catalog.find((p) => p.id === item.id);
+    if (!product) return;
+    
+    const isCandle = product.name?.toLowerCase().includes("kaars") ||
+                    SPECIFIC_CANDLES.includes(item.id);
+    
+    if (!isCandle) {
+      const totalQty = item.qty || 0;
+      const sentQty = item.sendNow ? (item.qty || 0) : 0;
+      bulkCards += Math.max(0, totalQty - sentQty);
+      directShipmentCards += sentQty;
+    }
+  });
+
+  // Tel alle kaarsen
+  let totalCandles = 0;
+  items.forEach((item) => {
+    const product = catalog.find((p) => p.id === item.id);
+    if (!product) return;
+    
+    const isCandle = product.name?.toLowerCase().includes("kaars") ||
+                    SPECIFIC_CANDLES.includes(item.id);
+    
+    if (isCandle) {
+      totalCandles += item.qty || 0;
+    }
+  });
+
+  // Tel gekoppelde kaarsen
+  let attachedCandlesCount = 0;
+  items.forEach((item) => {
+    if (item.attachedCandles && item.attachedCandles.length > 0) {
+      attachedCandlesCount += item.attachedCandles.reduce((sum, c) => sum + (c.qty || 0), 0);
+    }
+  });
+
+  // Tel direct verzonden kaarsen
+  let directShipmentCandlesCount = 0;
+  items.forEach((item) => {
+    const product = catalog.find((p) => p.id === item.id);
+    if (!product) return;
+    
+    const isCandle = product.name?.toLowerCase().includes("kaars") ||
+                    SPECIFIC_CANDLES.includes(item.id);
+    
+    if (isCandle && item.sendNow) {
+      directShipmentCandlesCount += item.qty || 0;
+    }
+  });
+
+  // Losse kaarsen = totaal - gekoppeld - direct verzonden
+  const looseCandles = totalCandles - attachedCandlesCount - directShipmentCandlesCount;
+
+  // Bereken verzendkosten voor losse kaarsen (1-2 = €6.45, 3-4 = €12.90, etc.)
+  const candleGroups = Math.ceil(looseCandles / 2);
+  const candleShippingCost = candleGroups * 6.45;
+
+  // Bereken verzendkosten voor bulk kaarten
+  const freeCardsFromCandles = looseCandles * 5;
+  const cardsToPayFor = Math.max(0, bulkCards - freeCardsFromCandles);
+  const cardGroups = Math.ceil(cardsToPayFor / 25);
+  const cardShippingCost = cardGroups * 4.25;
+
+  // Bereken direct verzendkosten voor kaarten
+  let directShipmentCost = 0;
+  items.forEach((item) => {
+    const product = catalog.find((p) => p.id === item.id);
+    if (!product) return;
+    
+    const isCandle = product.name?.toLowerCase().includes("kaars") ||
+                    SPECIFIC_CANDLES.includes(item.id);
+    
+    if (!isCandle && item.sendNow) {
+      const sentQty = item.qty || 0;
+      for (let i = 0; i < sentQty; i++) {
+        const hasAttachedCandles = item.attachedCandles && item.attachedCandles.length > 0;
+        if (hasAttachedCandles) {
+          directShipmentCost += 6.45;
+        } else {
+          directShipmentCost += 1.13;
+        }
+      }
+    }
+  });
+
+  // Bereken direct verzendkosten voor kaarsen
+  const directShipmentCandlesCost = directShipmentCandlesCount * 6.45;
+
+  // Totale verzendkosten
+  const totalCost = cardShippingCost + candleShippingCost + directShipmentCost + directShipmentCandlesCost;
+
+  console.log(`📦 Verzendkosten herberekend:`, {
+    bulkCards,
+    looseCandles,
+    freeCardsFromCandles,
+    cardsToPayFor,
+    cardShippingCost,
+    candleShippingCost,
+    directShipmentCost,
+    directShipmentCandlesCost,
+    totalCost,
+  });
+
+  return Math.max(0, totalCost);
+}
+
 // Functie om orderbevestigings e-mails te versturen
 async function sendOrderConfirmationEmails({ orderId, items, sender, total, discount = 0, shippingCost = 0 }) {
   if (!EMAIL_PASS || !EMAIL_FROM) {
@@ -552,6 +671,28 @@ async function sendOrderConfirmationEmails({ orderId, items, sender, total, disc
 
   const subtotal = itemsList.reduce((sum, item) => sum + item.total, 0);
   const finalTotal = subtotal - discount + shippingCost;
+  
+  // Bereken aantal kaarten voor bulk korting (alleen bulk kaarten, geen kaarsen, geen direct verzonden)
+  // Dit is nodig om de juiste tekst te tonen: "Bulk korting (X kaarten: €14 per 5)"
+  let bulkKortingKaarten = 0;
+  if (discount > 0) {
+    // Tel alleen bulk kaarten (niet kaarsen, niet direct verzonden)
+    bulkKortingKaarten = itemsList.reduce((sum, item) => {
+      const product = catalog.find((p) => p.id === item.id);
+      const isCandle = product?.name?.toLowerCase().includes("kaars") || 
+                      product?.name?.toLowerCase().includes("candle") ||
+                      ["Espresso-Martini-Kaars", "Latte-Macchiato-Kaars", "Citroen-Kaars"].includes(item.id);
+      
+      // Alleen bulk kaarten tellen (niet kaarsen, niet direct verzonden)
+      if (!isCandle && !item.sendNow) {
+        return sum + item.qty;
+      }
+      return sum;
+    }, 0);
+    
+    // Rond af naar beneden naar groepen van 5
+    bulkKortingKaarten = Math.floor(bulkKortingKaarten / 5) * 5;
+  }
 
   // HTML template voor klant
   const customerEmailHtml = `
@@ -628,30 +769,26 @@ async function sendOrderConfirmationEmails({ orderId, items, sender, total, disc
       </table>
 
       <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
-        <h3 style="margin-top: 0; color: #333;">Kostenoverzicht:</h3>
-        <table style="width: 100%;">
-          <tr>
-            <td style="padding: 5px 0;"><strong>Subtotaal (producten):</strong></td>
-            <td style="text-align: right; padding: 5px 0;">€${subtotal.toFixed(2)}</td>
-          </tr>
-          <tr>
-            <td style="padding: 5px 0;"><strong>Korting:</strong></td>
-            <td style="text-align: right; padding: 5px 0; color: ${discount > 0 ? '#0a7f2e' : '#333'};">
-              ${discount > 0 ? `-€${discount.toFixed(2)}` : '€0.00'}
-            </td>
-          </tr>
-          <tr>
-            <td style="padding: 5px 0;"><strong>Verzendkosten:</strong></td>
-            <td style="text-align: right; padding: 5px 0;">€${shippingCost.toFixed(2)}</td>
-          </tr>
-          <tr style="border-top: 2px solid #333; margin-top: 10px;">
-            <td style="padding: 10px 0 5px 0;"><strong>Totaalbedrag:</strong></td>
-            <td style="text-align: right; padding: 10px 0 5px 0; font-size: 18px; font-weight: bold;">€${finalTotal.toFixed(2)}</td>
-          </tr>
-        </table>
-        <p style="margin: 10px 0 0 0; font-size: 12px; color: #666;">
-          <em>Berekening: €${subtotal.toFixed(2)} ${discount > 0 ? `- €${discount.toFixed(2)}` : ''} ${shippingCost > 0 ? `+ €${shippingCost.toFixed(2)}` : ''} = €${finalTotal.toFixed(2)}</em>
-        </p>
+        <div style="display: flex; justify-content: space-between; fontSize: 14; padding: 5px 0;">
+          <span>Subtotaal</span>
+          <span>€${subtotal.toFixed(2)}</span>
+        </div>
+        ${discount > 0 ? `
+        <div style="display: flex; justify-content: space-between; fontSize: 14; padding: 5px 0; color: #0a7f2e;">
+          <span>Bulk korting (${bulkKortingKaarten} kaarten: €14 per 5)</span>
+          <span>- €${discount.toFixed(2)}</span>
+        </div>
+        ` : ""}
+        ${shippingCost > 0 ? `
+        <div style="display: flex; justify-content: space-between; fontSize: 14; padding: 5px 0;">
+          <span>Verzendkosten</span>
+          <span>€${shippingCost.toFixed(2)}</span>
+        </div>
+        ` : ""}
+        <div style="display: flex; justify-content: space-between; fontSize: 18; font-weight: 700; margin-top: 4px; padding-top: 10px; border-top: 2px solid #333;">
+          <span>Totaal</span>
+          <span>€${finalTotal.toFixed(2)}</span>
+        </div>
       </div>
 
       <h3 style="color: #333; margin-top: 30px;">Afleveradres:</h3>
@@ -754,30 +891,26 @@ async function sendOrderConfirmationEmails({ orderId, items, sender, total, disc
       </table>
 
       <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
-        <h3 style="margin-top: 0; color: #333;">Kostenoverzicht:</h3>
-        <table style="width: 100%;">
-          <tr>
-            <td style="padding: 5px 0;"><strong>Subtotaal (producten):</strong></td>
-            <td style="text-align: right; padding: 5px 0;">€${subtotal.toFixed(2)}</td>
-          </tr>
-          <tr>
-            <td style="padding: 5px 0;"><strong>Korting:</strong></td>
-            <td style="text-align: right; padding: 5px 0; color: ${discount > 0 ? '#0a7f2e' : '#333'};">
-              ${discount > 0 ? `-€${discount.toFixed(2)}` : '€0.00'}
-            </td>
-          </tr>
-          <tr>
-            <td style="padding: 5px 0;"><strong>Verzendkosten:</strong></td>
-            <td style="text-align: right; padding: 5px 0;">€${shippingCost.toFixed(2)}</td>
-          </tr>
-          <tr style="border-top: 2px solid #333; margin-top: 10px;">
-            <td style="padding: 10px 0 5px 0;"><strong>Totaalbedrag:</strong></td>
-            <td style="text-align: right; padding: 10px 0 5px 0; font-size: 18px; font-weight: bold;">€${finalTotal.toFixed(2)}</td>
-          </tr>
-        </table>
-        <p style="margin: 10px 0 0 0; font-size: 12px; color: #666;">
-          <em>Berekening: €${subtotal.toFixed(2)} ${discount > 0 ? `- €${discount.toFixed(2)}` : ''} ${shippingCost > 0 ? `+ €${shippingCost.toFixed(2)}` : ''} = €${finalTotal.toFixed(2)}</em>
-        </p>
+        <div style="display: flex; justify-content: space-between; fontSize: 14; padding: 5px 0;">
+          <span>Subtotaal</span>
+          <span>€${subtotal.toFixed(2)}</span>
+        </div>
+        ${discount > 0 ? `
+        <div style="display: flex; justify-content: space-between; fontSize: 14; padding: 5px 0; color: #0a7f2e;">
+          <span>Bulk korting (${bulkKortingKaarten} kaarten: €14 per 5)</span>
+          <span>- €${discount.toFixed(2)}</span>
+        </div>
+        ` : ""}
+        ${shippingCost > 0 ? `
+        <div style="display: flex; justify-content: space-between; fontSize: 14; padding: 5px 0;">
+          <span>Verzendkosten</span>
+          <span>€${shippingCost.toFixed(2)}</span>
+        </div>
+        ` : ""}
+        <div style="display: flex; justify-content: space-between; fontSize: 18; font-weight: 700; margin-top: 4px; padding-top: 10px; border-top: 2px solid #333;">
+          <span>Totaal</span>
+          <span>€${finalTotal.toFixed(2)}</span>
+        </div>
       </div>
     </body>
     </html>
@@ -831,6 +964,10 @@ Ordernummer: ${orderId}
 Besteldatum: ${orderDate}
 Totaalbedrag: €${finalTotal.toFixed(2)}
 
+Kostenoverzicht:
+Subtotaal: €${subtotal.toFixed(2)}
+${discount > 0 ? `Bulk korting (${bulkKortingKaarten} kaarten: €14 per 5): -€${discount.toFixed(2)}\n` : ""}${shippingCost > 0 ? `Verzendkosten: €${shippingCost.toFixed(2)}\n` : ""}Totaal: €${finalTotal.toFixed(2)}
+
 Afzender gegevens:
 Naam: ${sender?.firstName || ""} ${sender?.lastName || ""}
 E-mail: ${sender?.email || ""}
@@ -860,13 +997,8 @@ ${itemsList.map((item) => {
   return itemText;
 }).join("\n\n")}
 
-Kostenoverzicht:
-Subtotaal (producten): €${subtotal.toFixed(2)}
-Korting: ${discount > 0 ? `-€${discount.toFixed(2)}` : '€0.00'}
-Verzendkosten: €${shippingCost.toFixed(2)}
-Totaalbedrag: €${finalTotal.toFixed(2)}
-
-Berekening: €${subtotal.toFixed(2)} ${discount > 0 ? `- €${discount.toFixed(2)}` : ''} ${shippingCost > 0 ? `+ €${shippingCost.toFixed(2)}` : ''} = €${finalTotal.toFixed(2)}`;
+Subtotaal: €${subtotal.toFixed(2)}
+${discount > 0 ? `Bulk korting (${bulkKortingKaarten} kaarten: €14 per 5): -€${discount.toFixed(2)}\n` : ""}${shippingCost > 0 ? `Verzendkosten: €${shippingCost.toFixed(2)}\n` : ""}Totaal: €${finalTotal.toFixed(2)}`;
 
   // Stuur e-mail naar klant
   if (sender?.email) {
@@ -1452,34 +1584,33 @@ app.post("/api/mollie/webhook", async (req, res) => {
           console.log(`🔍 Metadata shipping_cost veld:`, metadata.shipping_cost);
           console.log(`🔍 Metadata shipping veld:`, metadata.shipping);
           
-          // Probeer verzendkosten uit verschillende velden te halen
+          // Haal verzendkosten uit metadata
           let shippingCost = Number(metadata.shippingCost || metadata.shipping_cost || metadata.shipping?.cost || 0);
           
-          // Als verzendkosten nog steeds 0 zijn, probeer het uit het payment bedrag te berekenen
-          const paymentAmount = Number(payment.amount?.value || 0);
-          const catalog = loadCatalog();
-          const itemsTotal = items.reduce((sum, item) => {
-            const product = catalog.find((p) => p.id === item.id);
-            const price = product?.price || 0;
-            const qty = item.qty || 1;
-            return sum + (price * qty);
-          }, 0);
-          const calculatedShippingCost = paymentAmount - itemsTotal + discount;
+          // HERBEREEKEN verzendkosten met dezelfde logica als de frontend
+          // Dit zorgt ervoor dat de verzendkosten altijd correct zijn, zelfs als ze niet in metadata staan
+          const recalculatedShippingCost = recalculateShippingCost(items);
           
-          // Als de berekende verzendkosten redelijk zijn (> 0 en < 100), gebruik die
-          if (shippingCost === 0 && calculatedShippingCost > 0 && calculatedShippingCost < 100) {
-            console.log(`⚠️ Verzendkosten waren 0 in metadata, maar berekend uit payment: €${calculatedShippingCost.toFixed(2)}`);
-            shippingCost = calculatedShippingCost;
+          // Als verzendkosten uit metadata 0 zijn of significant verschillen, gebruik de herberekende waarde
+          if (shippingCost === 0 || Math.abs(shippingCost - recalculatedShippingCost) > 0.01) {
+            if (shippingCost === 0) {
+              console.log(`⚠️ Verzendkosten waren 0 in metadata, gebruik herberekende waarde: €${recalculatedShippingCost.toFixed(2)}`);
+            } else {
+              console.log(`⚠️ Verzendkosten verschillen: metadata=€${shippingCost.toFixed(2)}, herberekend=€${recalculatedShippingCost.toFixed(2)}, gebruik herberekende waarde`);
+            }
+            shippingCost = recalculatedShippingCost;
+          } else {
+            console.log(`✅ Verzendkosten uit metadata komen overeen met herberekening: €${shippingCost.toFixed(2)}`);
           }
+          
+          const paymentAmount = Number(payment.amount?.value || 0);
 
           // Debug logging om te zien wat er wordt geëxtraheerd
           console.log(`🔍 Items geëxtraheerd:`, items.length, "items");
           console.log(`🔍 Sender:`, sender ? `${sender.firstName} ${sender.lastName}` : "geen sender");
           console.log(`🔍 Discount:`, discount);
-          console.log(`🔍 Shipping cost (final):`, shippingCost);
+          console.log(`🔍 Shipping cost (final voor e-mail):`, shippingCost);
           console.log(`🔍 Payment amount:`, paymentAmount);
-          console.log(`🔍 Items total:`, itemsTotal);
-          console.log(`🔍 Calculated shipping:`, calculatedShippingCost);
 
           if (!items || items.length === 0) {
             console.error(`⚠️ Geen items gevonden in metadata voor ${orderId}`);
