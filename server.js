@@ -214,6 +214,7 @@ function updateStockForItems(items) {
 const statusesByOrderId = new Map();
 const paymentIdByOrderId = new Map();
 const stockAdjustedOrders = new Set();
+const emailsSentOrders = new Set(); // Voorkom dat e-mails meerdere keren worden verstuurd
 
 /* ------------ Users (DB via Prisma) ------------ */
 async function findUserByEmail(email) {
@@ -500,6 +501,239 @@ async function sendEmailViaSendGrid({ to, subject, html, text }) {
   } catch (e) {
     console.error("SendGrid e-mail verzenden mislukt:", e);
     throw e;
+  }
+}
+
+// Functie om orderbevestigings e-mails te versturen
+async function sendOrderConfirmationEmails({ orderId, items, sender, total, discount = 0, shippingCost = 0 }) {
+  if (!EMAIL_PASS || !EMAIL_FROM) {
+    console.error("⚠️ E-mail configuratie ontbreekt, kan geen orderbevestiging versturen");
+    return;
+  }
+
+  const catalog = loadCatalog();
+  const orderDate = new Date().toLocaleDateString("nl-NL", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  // Maak een lijst van bestelde items met details
+  const itemsList = items
+    .map((item) => {
+      const product = catalog.find((p) => p.id === item.id);
+      const productName = product?.name || item.id;
+      const productPrice = product?.price || 0;
+      const qty = item.qty || 1;
+      const itemTotal = productPrice * qty;
+      return {
+        name: productName,
+        qty,
+        price: productPrice,
+        total: itemTotal,
+        note: item.note || "",
+        sendNow: item.sendNow || false,
+        shipping: item.shipping || null,
+        attachedCandles: item.attachedCandles || [],
+      };
+    })
+    .filter((item) => item.qty > 0);
+
+  const subtotal = itemsList.reduce((sum, item) => sum + item.total, 0);
+  const finalTotal = subtotal - discount + shippingCost;
+
+  // HTML template voor klant
+  const customerEmailHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Orderbevestiging</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <h2 style="color: #333;">Bedankt voor je bestelling!</h2>
+      <p>Beste ${sender?.firstName || ""} ${sender?.lastName || ""},</p>
+      <p>We hebben je bestelling ontvangen en gaan er direct mee aan de slag.</p>
+      
+      <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <p style="margin: 0;"><strong>Ordernummer:</strong> ${orderId}</p>
+        <p style="margin: 5px 0 0 0;"><strong>Besteldatum:</strong> ${orderDate}</p>
+      </div>
+
+      <h3 style="color: #333; margin-top: 30px;">Je bestelling:</h3>
+      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+        <thead>
+          <tr style="background: #f5f5f5;">
+            <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Product</th>
+            <th style="padding: 10px; text-align: right; border-bottom: 2px solid #ddd;">Aantal</th>
+            <th style="padding: 10px; text-align: right; border-bottom: 2px solid #ddd;">Prijs</th>
+            <th style="padding: 10px; text-align: right; border-bottom: 2px solid #ddd;">Totaal</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsList
+            .map(
+              (item) => `
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #eee;">
+                ${item.name}
+                ${item.note ? `<br><small style="color: #666;">Bericht: ${item.note}</small>` : ""}
+                ${item.sendNow && item.shipping ? `<br><small style="color: #666;">Direct verzenden naar: ${item.shipping.firstName} ${item.shipping.lastName}, ${item.shipping.city}</small>` : ""}
+                ${item.attachedCandles && item.attachedCandles.length > 0 ? `<br><small style="color: #666;">Met kaars(en): ${item.attachedCandles.map((c) => `${c.qty}x ${c.id}`).join(", ")}</small>` : ""}
+              </td>
+              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee;">${item.qty}</td>
+              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee;">€${item.price.toFixed(2)}</td>
+              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee;">€${item.total.toFixed(2)}</td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+
+      <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <table style="width: 100%;">
+          <tr>
+            <td style="padding: 5px 0;"><strong>Subtotaal:</strong></td>
+            <td style="text-align: right; padding: 5px 0;">€${subtotal.toFixed(2)}</td>
+          </tr>
+          ${discount > 0 ? `<tr><td style="padding: 5px 0;"><strong>Korting:</strong></td><td style="text-align: right; padding: 5px 0; color: #0a7f2e;">-€${discount.toFixed(2)}</td></tr>` : ""}
+          ${shippingCost > 0 ? `<tr><td style="padding: 5px 0;"><strong>Verzendkosten:</strong></td><td style="text-align: right; padding: 5px 0;">€${shippingCost.toFixed(2)}</td></tr>` : ""}
+          <tr style="border-top: 2px solid #333;">
+            <td style="padding: 10px 0 5px 0;"><strong>Totaal:</strong></td>
+            <td style="text-align: right; padding: 10px 0 5px 0; font-size: 18px; font-weight: bold;">€${finalTotal.toFixed(2)}</td>
+          </tr>
+        </table>
+      </div>
+
+      <h3 style="color: #333; margin-top: 30px;">Afleveradres:</h3>
+      <p>
+        ${sender?.firstName || ""} ${sender?.lastName || ""}<br>
+        ${sender?.streetAndNumber || `${sender?.street || ""} ${sender?.number || ""}`.trim()}<br>
+        ${sender?.postalCode || ""} ${sender?.city || ""}<br>
+        ${sender?.country || ""}
+      </p>
+
+      <p style="margin-top: 30px; color: #666; font-size: 12px;">
+        Je ontvangt een aparte e-mail zodra je bestelling is verzonden.
+      </p>
+    </body>
+    </html>
+  `;
+
+  // HTML template voor bestellingen@momena.nl (admin)
+  const adminEmailHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Nieuwe bestelling - ${orderId}</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px;">
+      <h2 style="color: #333;">Nieuwe bestelling ontvangen</h2>
+      
+      <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <p style="margin: 0;"><strong>Ordernummer:</strong> ${orderId}</p>
+        <p style="margin: 5px 0 0 0;"><strong>Besteldatum:</strong> ${orderDate}</p>
+        <p style="margin: 5px 0 0 0;"><strong>Totaalbedrag:</strong> €${finalTotal.toFixed(2)}</p>
+      </div>
+
+      <h3 style="color: #333; margin-top: 30px;">Afzender gegevens:</h3>
+      <p>
+        <strong>Naam:</strong> ${sender?.firstName || ""} ${sender?.lastName || ""}<br>
+        <strong>E-mail:</strong> ${sender?.email || ""}<br>
+        <strong>Telefoon:</strong> ${sender?.phone || ""}<br>
+        <strong>Adres:</strong> ${sender?.streetAndNumber || `${sender?.street || ""} ${sender?.number || ""}`.trim()}<br>
+        <strong>Postcode:</strong> ${sender?.postalCode || ""}<br>
+        <strong>Plaats:</strong> ${sender?.city || ""}<br>
+        <strong>Land:</strong> ${sender?.country || ""}
+      </p>
+
+      <h3 style="color: #333; margin-top: 30px;">Bestelde producten:</h3>
+      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+        <thead>
+          <tr style="background: #f5f5f5;">
+            <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Product</th>
+            <th style="padding: 10px; text-align: right; border-bottom: 2px solid #ddd;">Aantal</th>
+            <th style="padding: 10px; text-align: right; border-bottom: 2px solid #ddd;">Prijs</th>
+            <th style="padding: 10px; text-align: right; border-bottom: 2px solid #ddd;">Totaal</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsList
+            .map(
+              (item) => `
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #eee;">
+                ${item.name}
+                ${item.note ? `<br><small style="color: #666;"><strong>Bericht:</strong> ${item.note}</small>` : ""}
+                ${item.sendNow && item.shipping ? `<br><small style="color: #666;"><strong>Direct verzenden naar:</strong><br>
+                  ${item.shipping.firstName} ${item.shipping.lastName}<br>
+                  ${item.shipping.streetAndNumber || ""}<br>
+                  ${item.shipping.postalCode || ""} ${item.shipping.city || ""}<br>
+                  ${item.shipping.country || ""}
+                  ${item.shipping.deliveryDate ? `<br><strong>Gewenste aankomstdatum:</strong> ${item.shipping.deliveryDate}` : ""}
+                </small>` : ""}
+                ${item.attachedCandles && item.attachedCandles.length > 0 ? `<br><small style="color: #666;"><strong>Met kaars(en):</strong> ${item.attachedCandles.map((c) => `${c.qty}x ${c.id}`).join(", ")}</small>` : ""}
+              </td>
+              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee;">${item.qty}</td>
+              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee;">€${item.price.toFixed(2)}</td>
+              <td style="padding: 10px; text-align: right; border-bottom: 1px solid #eee;">€${item.total.toFixed(2)}</td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+
+      <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <table style="width: 100%;">
+          <tr>
+            <td style="padding: 5px 0;"><strong>Subtotaal:</strong></td>
+            <td style="text-align: right; padding: 5px 0;">€${subtotal.toFixed(2)}</td>
+          </tr>
+          ${discount > 0 ? `<tr><td style="padding: 5px 0;"><strong>Korting:</strong></td><td style="text-align: right; padding: 5px 0; color: #0a7f2e;">-€${discount.toFixed(2)}</td></tr>` : ""}
+          ${shippingCost > 0 ? `<tr><td style="padding: 5px 0;"><strong>Verzendkosten:</strong></td><td style="text-align: right; padding: 5px 0;">€${shippingCost.toFixed(2)}</td></tr>` : ""}
+          <tr style="border-top: 2px solid #333;">
+            <td style="padding: 10px 0 5px 0;"><strong>Totaal:</strong></td>
+            <td style="text-align: right; padding: 10px 0 5px 0; font-size: 18px; font-weight: bold;">€${finalTotal.toFixed(2)}</td>
+          </tr>
+        </table>
+      </div>
+    </body>
+    </html>
+  `;
+
+  // Stuur e-mail naar klant
+  if (sender?.email) {
+    try {
+      await sendEmailViaSendGrid({
+        to: sender.email,
+        subject: `Orderbevestiging - ${orderId}`,
+        html: customerEmailHtml,
+        text: `Bedankt voor je bestelling!\n\nOrdernummer: ${orderId}\nBesteldatum: ${orderDate}\n\nTotaal: €${finalTotal.toFixed(2)}\n\nJe ontvangt een aparte e-mail zodra je bestelling is verzonden.`,
+      });
+      console.log(`✅ Orderbevestiging verzonden naar klant: ${sender.email}`);
+    } catch (emailError) {
+      console.error(`❌ E-mail naar klant mislukt (${sender.email}):`, emailError);
+    }
+  }
+
+  // Stuur e-mail naar bestellingen@momena.nl
+  try {
+    await sendEmailViaSendGrid({
+      to: "bestellingen@momena.nl",
+      subject: `Nieuwe bestelling - ${orderId}`,
+      html: adminEmailHtml,
+      text: `Nieuwe bestelling ontvangen\n\nOrdernummer: ${orderId}\nBesteldatum: ${orderDate}\nTotaal: €${finalTotal.toFixed(2)}\n\nAfzender: ${sender?.firstName || ""} ${sender?.lastName || ""} (${sender?.email || ""})`,
+    });
+    console.log(`✅ Orderbevestiging verzonden naar bestellingen@momena.nl`);
+  } catch (emailError) {
+    console.error(`❌ E-mail naar bestellingen@momena.nl mislukt:`, emailError);
   }
 }
 
@@ -829,6 +1063,41 @@ app.post("/api/mollie/webhook", async (req, res) => {
           console.log(`📦 Voorraad bijgewerkt voor ${orderId}`);
         }
         stockAdjustedOrders.add(orderId);
+      }
+
+      // Stuur orderbevestigings e-mails wanneer betaling succesvol is
+      if (
+        (status === "paid" || status === "authorized") &&
+        !emailsSentOrders.has(orderId) &&
+        payment.metadata
+      ) {
+        try {
+          const metadata = payment.metadata;
+          const items = extractItemsFromMetadata(metadata);
+          const sender = metadata.sender || null;
+          const discount = Number(metadata.discount || 0);
+          
+          // Bereken shipping cost uit payment amount en items
+          const catalog = loadCatalog();
+          const itemsTotal = calcTotal(items, catalog);
+          const paymentAmount = Number(payment.amount?.value || 0);
+          const shippingCost = Math.max(0, paymentAmount - itemsTotal + discount);
+
+          await sendOrderConfirmationEmails({
+            orderId,
+            items,
+            sender,
+            total: paymentAmount,
+            discount,
+            shippingCost,
+          });
+          
+          emailsSentOrders.add(orderId);
+          console.log(`📧 Orderbevestigings e-mails verzonden voor ${orderId}`);
+        } catch (emailError) {
+          console.error(`❌ Orderbevestigings e-mails mislukt voor ${orderId}:`, emailError);
+          // Voeg niet toe aan emailsSentOrders zodat het opnieuw kan worden geprobeerd
+        }
       }
     }
 
