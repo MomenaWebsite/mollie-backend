@@ -511,6 +511,11 @@ async function sendOrderConfirmationEmails({ orderId, items, sender, total, disc
     return;
   }
 
+  // Debug: log verzendkosten die worden ontvangen
+  console.log(`📧 E-mail functie ontvangt verzendkosten: €${shippingCost.toFixed(2)} voor order ${orderId}`);
+  console.log(`📧 E-mail functie ontvangt totaal: €${total.toFixed(2)}`);
+  console.log(`📧 E-mail functie ontvangt korting: €${discount.toFixed(2)}`);
+
   const catalog = loadCatalog();
   const orderDate = new Date().toLocaleDateString("nl-NL", {
     year: "numeric",
@@ -1441,14 +1446,40 @@ app.post("/api/mollie/webhook", async (req, res) => {
           const items = extractItemsFromMetadata(metadata);
           const sender = metadata.sender || null;
           const discount = Number(metadata.discount || 0);
-          const shippingCost = Number(metadata.shippingCost || 0);
+          
+          // Debug: controleer alle mogelijke velden voor verzendkosten
+          console.log(`🔍 Metadata shippingCost veld:`, metadata.shippingCost);
+          console.log(`🔍 Metadata shipping_cost veld:`, metadata.shipping_cost);
+          console.log(`🔍 Metadata shipping veld:`, metadata.shipping);
+          
+          // Probeer verzendkosten uit verschillende velden te halen
+          let shippingCost = Number(metadata.shippingCost || metadata.shipping_cost || metadata.shipping?.cost || 0);
+          
+          // Als verzendkosten nog steeds 0 zijn, probeer het uit het payment bedrag te berekenen
           const paymentAmount = Number(payment.amount?.value || 0);
+          const catalog = loadCatalog();
+          const itemsTotal = items.reduce((sum, item) => {
+            const product = catalog.find((p) => p.id === item.id);
+            const price = product?.price || 0;
+            const qty = item.qty || 1;
+            return sum + (price * qty);
+          }, 0);
+          const calculatedShippingCost = paymentAmount - itemsTotal + discount;
+          
+          // Als de berekende verzendkosten redelijk zijn (> 0 en < 100), gebruik die
+          if (shippingCost === 0 && calculatedShippingCost > 0 && calculatedShippingCost < 100) {
+            console.log(`⚠️ Verzendkosten waren 0 in metadata, maar berekend uit payment: €${calculatedShippingCost.toFixed(2)}`);
+            shippingCost = calculatedShippingCost;
+          }
 
           // Debug logging om te zien wat er wordt geëxtraheerd
           console.log(`🔍 Items geëxtraheerd:`, items.length, "items");
           console.log(`🔍 Sender:`, sender ? `${sender.firstName} ${sender.lastName}` : "geen sender");
           console.log(`🔍 Discount:`, discount);
-          console.log(`🔍 Shipping cost:`, shippingCost);
+          console.log(`🔍 Shipping cost (final):`, shippingCost);
+          console.log(`🔍 Payment amount:`, paymentAmount);
+          console.log(`🔍 Items total:`, itemsTotal);
+          console.log(`🔍 Calculated shipping:`, calculatedShippingCost);
 
           if (!items || items.length === 0) {
             console.error(`⚠️ Geen items gevonden in metadata voor ${orderId}`);
