@@ -29,6 +29,8 @@ const PORT = process.env.PORT || 3000;
 const MOLLIE_API_KEY = process.env.MOLLIE_API_KEY;
 const POSTNL_API_KEY = process.env.POSTNL_API_KEY;
 const POSTNL_API_BASE_URL = (process.env.POSTNL_API_BASE_URL || "https://api.postnl.nl").replace(/\/$/, "");
+const POSTNL_SHIPMENTS_ENDPOINT = (process.env.POSTNL_SHIPMENTS_ENDPOINT || "/shipment/v2_2/shipment").replace(/^\//, "");
+const POSTNL_CALCULATE_ENDPOINT = (process.env.POSTNL_CALCULATE_ENDPOINT || "/shipment/v2_2/calculate/shipment").replace(/^\//, "");
 const EMAIL_PASS = process.env.EMAIL_PASS; // SendGrid API key
 const EMAIL_USER = process.env.EMAIL_USER || "apikey";
 const EMAIL_HOST = process.env.EMAIL_HOST || "smtp.sendgrid.net";
@@ -42,6 +44,8 @@ const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-env";
 if (!MOLLIE_API_KEY) console.warn("⚠️ Missing MOLLIE_API_KEY");
 if (!POSTNL_API_KEY) console.warn("⚠️ Missing POSTNL_API_KEY");
 console.log(`📦 PostNL API base URL: ${POSTNL_API_BASE_URL}`);
+console.log(`📦 PostNL shipments endpoint: /${POSTNL_SHIPMENTS_ENDPOINT}`);
+console.log(`📦 PostNL calculate endpoint: /${POSTNL_CALCULATE_ENDPOINT}`);
 if (!EMAIL_PASS) console.warn("⚠️ Missing EMAIL_PASS (SendGrid API key)");
 console.log(`📧 E-mail wordt verzonden vanaf: ${EMAIL_FROM} (zorg dat dit e-mailadres geverifieerd is in SendGrid)`);
 if (!FRONTEND_URL) console.warn("⚠️ Missing FRONTEND_URL");
@@ -1184,7 +1188,7 @@ app.post("/api/calculate-shipping", async (req, res) => {
 		// Gebruik PostNL API om verzendkosten te berekenen op basis van gewicht
 		// Let op: Deze endpoint werkt mogelijk alleen met een geldige PostNL account
 		try {
-			const calculateResponse = await fetch(`${POSTNL_API_BASE_URL}/shipment/v2_2/calculate/shipment`, {
+			const calculateResponse = await fetch(`${POSTNL_API_BASE_URL}/${POSTNL_CALCULATE_ENDPOINT}`, {
 				method: "POST",
 				headers: {
 					"apikey": POSTNL_API_KEY,
@@ -1241,7 +1245,7 @@ async function createPostNLShipment(shipmentData) {
 	try {
 		// PostNL Shipping API endpoint - gebruik de juiste base URL
 		// Let op: PostNL API vereist mogelijk een andere endpoint structuur
-		const apiUrl = `${POSTNL_API_BASE_URL}/shipment/v2_2/shipment`;
+		const apiUrl = `${POSTNL_API_BASE_URL}/${POSTNL_SHIPMENTS_ENDPOINT}`;
 		
 		console.log(`📦 PostNL API call naar: ${apiUrl}`);
 		console.log(`📦 PostNL shipment data:`, JSON.stringify(shipmentData, null, 2));
