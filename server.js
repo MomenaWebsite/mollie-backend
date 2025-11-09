@@ -29,7 +29,6 @@ const PORT = process.env.PORT || 3000;
 const MOLLIE_API_KEY = process.env.MOLLIE_API_KEY;
 const POSTNL_API_KEY = process.env.POSTNL_API_KEY;
 const POSTNL_API_BASE_URL = (process.env.POSTNL_API_BASE_URL || "https://api.postnl.nl").replace(/\/$/, "");
-const POSTNL_SHIPMENTS_ENDPOINT = (process.env.POSTNL_SHIPMENTS_ENDPOINT || "/shipment/v2_2/shipment").replace(/^\//, "");
 const POSTNL_CALCULATE_ENDPOINT = (process.env.POSTNL_CALCULATE_ENDPOINT || "/shipment/v2_2/calculate/shipment").replace(/^\//, "");
 const EMAIL_PASS = process.env.EMAIL_PASS; // SendGrid API key
 const EMAIL_USER = process.env.EMAIL_USER || "apikey";
@@ -44,7 +43,6 @@ const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-env";
 if (!MOLLIE_API_KEY) console.warn("⚠️ Missing MOLLIE_API_KEY");
 if (!POSTNL_API_KEY) console.warn("⚠️ Missing POSTNL_API_KEY");
 console.log(`📦 PostNL API base URL: ${POSTNL_API_BASE_URL}`);
-console.log(`📦 PostNL shipments endpoint: /${POSTNL_SHIPMENTS_ENDPOINT}`);
 console.log(`📦 PostNL calculate endpoint: /${POSTNL_CALCULATE_ENDPOINT}`);
 if (!EMAIL_PASS) console.warn("⚠️ Missing EMAIL_PASS (SendGrid API key)");
 console.log(`📧 E-mail wordt verzonden vanaf: ${EMAIL_FROM} (zorg dat dit e-mailadres geverifieerd is in SendGrid)`);
@@ -1240,252 +1238,6 @@ app.post("/api/calculate-shipping", async (req, res) => {
 	}
 });
 
-// PostNL helper: maak shipment aan
-async function createPostNLShipment(shipmentData) {
-	try {
-		// PostNL Shipping API endpoint - gebruik de juiste base URL
-		// Let op: PostNL API vereist mogelijk een andere endpoint structuur
-		const apiUrl = `${POSTNL_API_BASE_URL}/${POSTNL_SHIPMENTS_ENDPOINT}`;
-		
-		console.log(`📦 PostNL API call naar: ${apiUrl}`);
-		console.log(`📦 PostNL shipment data:`, JSON.stringify(shipmentData, null, 2));
-		
-		const response = await fetch(apiUrl, {
-			method: "POST",
-			headers: {
-				"apikey": POSTNL_API_KEY,
-				"Content-Type": "application/json",
-				"Accept": "application/json",
-			},
-			body: JSON.stringify(shipmentData),
-		});
-		
-		const responseText = await response.text();
-		console.log(`📦 PostNL API response status: ${response.status}`);
-		console.log(`📦 PostNL API response:`, responseText);
-		
-		if (!response.ok) {
-			throw new Error(`PostNL API error: ${response.status} - ${responseText}`);
-		}
-		
-		try {
-			return JSON.parse(responseText);
-		} catch (parseError) {
-			console.error("⚠️ Kon PostNL response niet parsen als JSON:", parseError);
-			throw new Error(`PostNL API response is geen geldige JSON: ${responseText}`);
-		}
-	} catch (e) {
-		console.error("PostNL shipment creation mislukt:", e);
-		throw e;
-	}
-}
-
-// PostNL helper: genereer barcodelabels voor een bestelling
-async function generatePostNLLabels({ orderId, sender, items, shippingAddresses = [] }) {
-	if (!POSTNL_API_KEY) {
-		console.error("⚠️ POSTNL_API_KEY ontbreekt, kan geen labels genereren");
-		return null;
-	}
-
-	// Controleer of sender en items aanwezig zijn
-	if (!sender || !items || items.length === 0) {
-		console.error("⚠️ Sender of items ontbreken, kan geen labels genereren");
-		return null;
-	}
-
-	try {
-		const catalog = loadCatalog();
-		
-		// Bereken totaal gewicht in gram
-		const totalWeight = items.reduce((sum, item) => {
-			const product = catalog.find((p) => p.id === item.id);
-			const itemWeight = Number(product?.weight || 50); // gram, standaard 50g
-			const qty = Number(item.qty || 0);
-			return sum + (itemWeight * qty);
-		}, 0);
-
-		// Valideer sender gegevens
-		if (!sender?.postalCode || !sender?.city) {
-			console.error("⚠️ Sender postcode of stad ontbreekt, kan geen labels genereren");
-			return null;
-		}
-
-		// Maak shipment data voor PostNL
-		// Let op: PostNL API vereist mogelijk een specifieke data structuur
-		const shipmentData = {
-			Shipments: [
-				{
-					Addresses: [
-						{
-							AddressType: "01", // Thuis
-							FirstName: sender?.firstName || "",
-							Name: sender?.lastName || "",
-							Street: sender?.street || "",
-							HouseNr: sender?.number || "",
-							HouseNrExt: "",
-							Zipcode: sender?.postalCode?.replace(/\s+/g, "") || "",
-							City: sender?.city || "",
-							Countrycode: (sender?.country || "NL").toUpperCase(),
-						},
-					],
-					Dimension: {
-						Weight: Math.max(100, Math.min(totalWeight, 30000)), // Min 100g, max 30kg
-					},
-					ProductCodeDelivery: "3085", // Thuis bezorgen
-					Customer: {
-						CustomerNumber: orderId,
-						CustomerCode: orderId,
-					},
-					Reference: orderId,
-				},
-			],
-		};
-
-		// Voeg direct verzonden items toe als aparte shipments
-		shippingAddresses.forEach((shipping, index) => {
-			if (shipping && shipping.postalCode) {
-				shipmentData.Shipments.push({
-					Addresses: [
-						{
-							AddressType: "01", // Thuis
-							FirstName: shipping.firstName || "",
-							Name: shipping.lastName || "",
-							Street: shipping.streetAndNumber?.split(" ")[0] || "",
-							HouseNr: shipping.streetAndNumber?.split(" ").slice(1).join(" ") || "",
-							HouseNrExt: "",
-							Zipcode: shipping.postalCode?.replace(/\s+/g, "") || "",
-							City: shipping.city || "",
-							Countrycode: (shipping.country || "NL").toUpperCase(),
-						},
-					],
-					Dimension: {
-						Weight: 100, // Minimaal gewicht voor direct verzonden items
-					},
-					ProductCodeDelivery: "3085", // Thuis bezorgen
-					Customer: {
-						CustomerNumber: `${orderId}-direct-${index}`,
-						CustomerCode: `${orderId}-direct-${index}`,
-					},
-					Reference: `${orderId}-direct-${index}`,
-				});
-			}
-		});
-
-		// Maak shipment aan via PostNL API
-		const shipmentResponse = await createPostNLShipment(shipmentData);
-		
-		if (!shipmentResponse || !shipmentResponse.ResponseShipments) {
-			console.error("⚠️ Geen shipment response van PostNL");
-			return null;
-		}
-
-		// Haal labels op voor elk shipment
-		const labels = [];
-		for (const responseShipment of shipmentResponse.ResponseShipments) {
-			if (responseShipment.Labels && responseShipment.Labels.length > 0) {
-				for (const label of responseShipment.Labels) {
-					if (label.Label) {
-						labels.push({
-							barcode: label.Barcode || "",
-							label: label.Label || "", // Base64 encoded label
-							shipmentId: responseShipment.ShipmentId || "",
-							reference: responseShipment.Reference || orderId,
-						});
-					}
-				}
-			}
-		}
-
-		console.log(`✅ PostNL labels gegenereerd voor ${orderId}: ${labels.length} label(s)`);
-		return labels;
-	} catch (e) {
-		console.error(`❌ PostNL label generatie mislukt voor ${orderId}:`, e);
-		return null;
-	}
-}
-
-// Sla labels op in een Map voor later ophalen
-const orderLabels = new Map(); // orderId -> labels array
-
-// PostNL helper: verstuur labels via e-mail
-async function sendPostNLLabelsViaEmail({ orderId, labels, sender }) {
-	if (!labels || labels.length === 0) {
-		console.warn(`⚠️ Geen labels om te versturen voor ${orderId}`);
-		return;
-	}
-
-	try {
-		// Maak HTML e-mail met labels als bijlagen
-		const labelsHtml = labels.map((label, index) => {
-			return `
-				<div style="margin-bottom: 20px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-					<h3 style="margin-top: 0;">Label ${index + 1}</h3>
-					<p><strong>Barcode:</strong> ${label.barcode || "N/A"}</p>
-					<p><strong>Shipment ID:</strong> ${label.shipmentId || "N/A"}</p>
-					<p><strong>Reference:</strong> ${label.reference || orderId}</p>
-					<img src="data:image/png;base64,${label.label}" alt="PostNL Label ${index + 1}" style="max-width: 100%; height: auto; border: 1px solid #ccc;" />
-				</div>
-			`;
-		}).join("");
-
-		const html = `
-			<!DOCTYPE html>
-			<html>
-			<head>
-				<meta charset="UTF-8">
-				<title>PostNL Labels - Bestelling ${orderId}</title>
-			</head>
-			<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-				<div style="max-width: 800px; margin: 0 auto; padding: 20px;">
-					<h1 style="color: #0066cc;">PostNL Barcodelabels</h1>
-					<p><strong>Bestelling:</strong> ${orderId}</p>
-					${sender ? `<p><strong>Afzender:</strong> ${sender.firstName} ${sender.lastName}</p>` : ""}
-					<p><strong>Aantal labels:</strong> ${labels.length}</p>
-					
-					<div style="margin-top: 30px;">
-						<h2>Labels:</h2>
-						${labelsHtml}
-					</div>
-					
-					<p style="margin-top: 30px; color: #666; font-size: 12px;">
-						Deze labels zijn gegenereerd via de PostNL API. Print ze uit en plak ze op de pakketten.
-					</p>
-				</div>
-			</body>
-			</html>
-		`;
-
-		const text = `
-PostNL Barcodelabels
-Bestelling: ${orderId}
-${sender ? `Afzender: ${sender.firstName} ${sender.lastName}` : ""}
-Aantal labels: ${labels.length}
-
-Labels:
-${labels.map((label, index) => `
-Label ${index + 1}:
-- Barcode: ${label.barcode || "N/A"}
-- Shipment ID: ${label.shipmentId || "N/A"}
-- Reference: ${label.reference || orderId}
-`).join("\n")}
-
-Deze labels zijn gegenereerd via de PostNL API. Print ze uit en plak ze op de pakketten.
-		`;
-
-		// Verstuur naar bestellingen@momena.nl
-		await sendEmailViaSendGrid({
-			to: "bestellingen@momena.nl",
-			subject: `PostNL Labels - Bestelling ${orderId}`,
-			html,
-			text,
-		});
-
-		console.log(`📧 PostNL labels verzonden via e-mail voor ${orderId}`);
-	} catch (e) {
-		console.error(`❌ E-mail verzending van labels mislukt voor ${orderId}:`, e);
-		throw e;
-	}
-}
 
 /* --------- Checkout ---------- */
 app.post("/api/create-payment-from-cart", async (req, res) => {
@@ -1665,45 +1417,6 @@ app.post("/api/mollie/webhook", async (req, res) => {
           
           emailsSentOrders.add(orderId);
           console.log(`📧 Orderbevestigings e-mails verzonden voor ${orderId}`);
-
-          // Genereer PostNL barcodelabels voor de bestelling
-          try {
-            // Verzamel alle direct verzonden adressen uit items
-            const shippingAddresses = items
-              .filter((item) => item.sendNow && item.shipping)
-              .map((item) => item.shipping);
-
-            const labels = await generatePostNLLabels({
-              orderId,
-              sender,
-              items,
-              shippingAddresses,
-            });
-
-            if (labels && labels.length > 0) {
-              console.log(`✅ PostNL labels gegenereerd voor ${orderId}: ${labels.length} label(s)`);
-              
-              // Sla labels op voor later ophalen
-              orderLabels.set(orderId, labels);
-              
-              // Verstuur labels via e-mail naar bestellingen@momena.nl
-              try {
-                await sendPostNLLabelsViaEmail({
-                  orderId,
-                  labels,
-                  sender,
-                });
-              } catch (emailError) {
-                console.error(`❌ E-mail verzending van labels mislukt voor ${orderId}:`, emailError);
-                // E-mail fout mag label generatie niet blokkeren
-              }
-            } else {
-              console.warn(`⚠️ Geen labels gegenereerd voor ${orderId}`);
-            }
-          } catch (labelError) {
-            console.error(`❌ PostNL label generatie mislukt voor ${orderId}:`, labelError);
-            // Label generatie fout mag e-mail verzending niet blokkeren
-          }
         } catch (emailError) {
           console.error(`❌ Orderbevestigings e-mails mislukt voor ${orderId}:`, emailError);
           console.error(`❌ Error details:`, emailError.stack);
@@ -1726,21 +1439,6 @@ app.get("/api/order-status", (req, res) => {
   const status = statusesByOrderId.get(orderId) || "unknown";
   const paymentId = paymentIdByOrderId.get(orderId) || null;
   res.json({ orderId, status, paymentId });
-});
-
-// Endpoint om PostNL labels op te halen
-app.get("/api/postnl-labels", (req, res) => {
-  const orderId = req.query.orderId;
-  if (!orderId) {
-    return res.status(400).json({ error: "orderId required" });
-  }
-  
-  const labels = orderLabels.get(orderId);
-  if (!labels || labels.length === 0) {
-    return res.status(404).json({ error: "Geen labels gevonden voor deze bestelling" });
-  }
-  
-  res.json({ orderId, labels });
 });
 
 app.get("/api/payment-status", async (req, res) => {
