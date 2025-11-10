@@ -37,6 +37,9 @@ const EMAIL_PORT = process.env.EMAIL_PORT || "587";
 const EMAIL_SENDER_NAME = process.env.EMAIL_SENDER_NAME || "Momona";
 const EMAIL_FROM = process.env.EMAIL_FROM || "info@momena.nl"; // Geverifieerd e-mailadres in SendGrid
 const FRONTEND_URL = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
+const FRONTEND_THANKYOU_URL =
+  process.env.FRONTEND_THANKYOU_URL ||
+  (FRONTEND_URL ? `${FRONTEND_URL}/bedankt` : "");
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-env";
 
@@ -47,6 +50,7 @@ console.log(`📦 PostNL calculate endpoint: /${POSTNL_CALCULATE_ENDPOINT}`);
 if (!EMAIL_PASS) console.warn("⚠️ Missing EMAIL_PASS (SendGrid API key)");
 console.log(`📧 E-mail wordt verzonden vanaf: ${EMAIL_FROM} (zorg dat dit e-mailadres geverifieerd is in SendGrid)`);
 if (!FRONTEND_URL) console.warn("⚠️ Missing FRONTEND_URL");
+if (!FRONTEND_THANKYOU_URL) console.warn("⚠️ Missing FRONTEND_THANKYOU_URL");
 if (!PUBLIC_BASE_URL)
   console.warn("⚠️ Missing PUBLIC_BASE_URL (webhookUrl may be invalid)");
 if (JWT_SECRET === "change-me-in-env")
@@ -1297,10 +1301,14 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
       metadataSize: JSON.stringify(metadata).length,
     });
 
+    if (!FRONTEND_THANKYOU_URL) {
+      throw new Error("FRONTEND_THANKYOU_URL is not configured");
+    }
+
     const payment = await mollie("/payments", "POST", {
       amount: { currency: "EUR", value: total.toFixed(2) },
       description,
-      redirectUrl: `${FRONTEND_URL}/bedankt?orderId=${encodeURIComponent(
+      redirectUrl: `${FRONTEND_THANKYOU_URL}?orderId=${encodeURIComponent(
         orderId
       )}`,
       webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
