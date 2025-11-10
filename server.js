@@ -221,6 +221,7 @@ function updateStockForItems(items) {
 /* ------------ In-memory order status ------------ */
 const statusesByOrderId = new Map();
 const paymentIdByOrderId = new Map();
+const metadataByOrderId = new Map();
 const stockAdjustedOrders = new Set();
 const emailsSentOrders = new Set(); // Voorkom dat e-mails meerdere keren worden verstuurd
 
@@ -1318,6 +1319,8 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
     // Debug logging om te zien wat Mollie heeft opgeslagen
     console.log(`📦 Payment aangemaakt voor ${orderId}, metadata in payment:`, payment.metadata);
 
+    metadataByOrderId.set(orderId, metadata);
+
     if (payment?.metadata?.orderId && payment?.id) {
       paymentIdByOrderId.set(payment.metadata.orderId, payment.id);
     }
@@ -1399,6 +1402,7 @@ app.post("/api/mollie/webhook", async (req, res) => {
           }
           
           const paymentAmount = Number(payment.amount?.value || 0);
+          metadataByOrderId.set(orderId, metadata);
 
           // Debug logging om te zien wat er wordt geëxtraheerd
           console.log(`🔍 Items geëxtraheerd:`, items.length, "items");
@@ -1447,6 +1451,69 @@ app.get("/api/order-status", (req, res) => {
   const status = statusesByOrderId.get(orderId) || "unknown";
   const paymentId = paymentIdByOrderId.get(orderId) || null;
   res.json({ orderId, status, paymentId });
+});
+
+app.get("/api/order-details", async (req, res) => {
+  const orderId = req.query.orderId;
+  if (!orderId) {
+    return res.status(400).json({ error: "orderId required" });
+  }
+
+  const metadata = metadataByOrderId.get(orderId);
+  if (!metadata) {
+    return res.status(404).json({ error: "Order niet gevonden" });
+  }
+
+  const paymentId = paymentIdByOrderId.get(orderId) || null;
+  let payment = null;
+  let status = statusesByOrderId.get(orderId) || "unknown";
+
+  try {
+    if (paymentId) {
+      payment = await mollie(`/payments/${paymentId}`, "GET");
+      status = payment?.status || status;
+    }
+  } catch (e) {
+    console.error(`⚠️ Kon payment niet ophalen voor ${orderId}:`, e);
+  }
+
+  const catalog = loadCatalog();
+  const itemsMeta = Array.isArray(metadata.items) ? metadata.items : [];
+
+  const items = itemsMeta.map((item) => {
+    const product = catalog.find((p) => p.id === item.id);
+    const price = Number(product?.price || 0);
+    const qty = Number(item.qty || 1);
+    return {
+      id: item.id,
+      name: product?.name || item.id,
+      price,
+      image: product?.image || null,
+      qty,
+      lineTotal: price * qty,
+      sendNow: !!item.sendNow,
+      note: item.note || "",
+      shipping: item.shipping || null,
+      attachedCandles: item.attachedCandles || [],
+    };
+  });
+
+  const subTotal = items.reduce((sum, it) => sum + it.lineTotal, 0);
+  const discount = Number(metadata.discount || 0);
+  const shippingCost = Number(metadata.shippingCost || 0);
+  const total = Math.max(0, subTotal - discount + shippingCost);
+
+  res.json({
+    orderId,
+    paymentId: payment?.id || paymentId,
+    status,
+    sender: metadata.sender || null,
+    discount,
+    subTotal,
+    shippingCost,
+    total,
+    items,
+  });
 });
 
 app.get("/api/payment-status", async (req, res) => {
