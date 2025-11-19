@@ -649,6 +649,70 @@ app.get("/api/order-status", (req, res) => {
   res.json({ orderId, status, paymentId });
 });
 
+app.get("/api/order-details", async (req, res) => {
+  const orderId = req.query.orderId;
+  if (!orderId) return res.status(400).json({ error: "orderId required" });
+
+  try {
+    // Haal paymentId op uit de map
+    const paymentId = paymentIdByOrderId.get(orderId);
+    if (!paymentId) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    // Haal payment op van Mollie
+    const payment = await mollie(`/payments/${paymentId}`, "GET");
+    if (!payment || !payment.metadata) {
+      return res.status(404).json({ error: "Order metadata not found" });
+    }
+
+    const metadata = payment.metadata;
+    const items = extractItemsFromMetadata(metadata);
+    const catalog = loadCatalog();
+
+    // Verrijk items met product informatie
+    const enrichedItems = items.map((item) => {
+      const product = catalog.find((p) => p.id === item.id);
+      const qty = Number(item.qty || 1);
+      const price = product?.price || 0;
+      
+      return {
+        id: item.id,
+        name: product?.name || item.id,
+        price: price,
+        image: product?.image || null,
+        qty: qty,
+        lineTotal: price * qty,
+        sendNow: item.sendNow || false,
+        note: item.note || undefined,
+        shipping: item.shipping || undefined,
+        attachedCandles: item.attachedCandles || undefined,
+      };
+    });
+
+    // Bereken subtotaal en totaal
+    const subTotal = enrichedItems.reduce((sum, item) => sum + item.lineTotal, 0);
+    const discount = Number(metadata.discount || 0);
+    const shippingCost = Number(metadata.shippingCost || 0);
+    const giftWrapCost = Number(metadata.giftWrapCost || 0);
+    const total = Math.max(0, subTotal - discount + shippingCost + giftWrapCost);
+
+    res.json({
+      orderId: metadata.orderId || orderId,
+      paymentId: paymentId,
+      status: payment.status || statusesByOrderId.get(orderId) || "unknown",
+      sender: metadata.sender || null,
+      discount: discount,
+      subTotal: subTotal,
+      total: total,
+      items: enrichedItems,
+    });
+  } catch (e) {
+    console.error("Error fetching order details:", e);
+    res.status(500).json({ error: "Failed to fetch order details" });
+  }
+});
+
 app.get("/api/payment-status", async (req, res) => {
   const paymentId = req.query.paymentId;
   if (!paymentId) return res.status(400).json({ error: "paymentId required" });
