@@ -54,7 +54,35 @@ const ALLOWED_ORIGINS_LIST = [
   "https://momenatest.framer.website", // Oude URL tijdelijk toestaan voor overgang
 ].filter((url, index, self) => self.indexOf(url) === index); // Remove duplicates
 
+// Functie om te checken of een origin is toegestaan (inclusief Framer development URLs)
+function isOriginAllowed(origin) {
+  if (!origin) return true;
+  
+  // Exacte match
+  if (ALLOWED_ORIGINS_LIST.includes(origin)) {
+    return true;
+  }
+  
+  // Framer Canvas URLs toestaan (alle *.framercanvas.com subdomeinen)
+  if (origin.match(/^https:\/\/[a-z0-9-]+\.framercanvas\.com$/)) {
+    return true;
+  }
+  
+  // Framer Screenshot URLs toestaan (alle *.framer.invalid subdomeinen)
+  if (origin.match(/^https:\/\/[a-z0-9-]+\.framer\.invalid$/)) {
+    return true;
+  }
+  
+  // Framer Website URLs toestaan (alle *.framer.website subdomeinen)
+  if (origin.match(/^https:\/\/[a-z0-9-]+\.framer\.website$/)) {
+    return true;
+  }
+  
+  return false;
+}
+
 console.log("🌐 Allowed CORS origins:", ALLOWED_ORIGINS_LIST);
+console.log("🌐 Framer development URLs (framercanvas.com, framer.invalid, framer.website) are also allowed");
 
 app.use(
   cors({
@@ -64,7 +92,7 @@ app.use(
         console.warn("⚠️ No CORS origins configured, allowing all");
         return cb(null, true);
       }
-      if (ALLOWED_ORIGINS_LIST.includes(origin)) {
+      if (isOriginAllowed(origin)) {
         return cb(null, true);
       }
       console.error(`❌ CORS blocked for origin: ${origin}`);
