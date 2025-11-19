@@ -46,12 +46,29 @@ function parseOrigins(input) {
 }
 const ALLOWED_ORIGINS = parseOrigins(FRONTEND_URL);
 
+// Voeg ook de nieuwe URL toe aan allowed origins (tijdelijk beide URLs toestaan)
+const ALLOWED_ORIGINS_LIST = [
+  ...ALLOWED_ORIGINS,
+  "https://momena.nl",
+  "https://www.momena.nl",
+  "https://momenatest.framer.website", // Oude URL tijdelijk toestaan voor overgang
+].filter((url, index, self) => self.indexOf(url) === index); // Remove duplicates
+
+console.log("🌐 Allowed CORS origins:", ALLOWED_ORIGINS_LIST);
+
 app.use(
   cors({
     origin: (origin, cb) => {
       if (!origin) return cb(null, true);
-      if (ALLOWED_ORIGINS.length === 0) return cb(null, true);
-      if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+      if (ALLOWED_ORIGINS_LIST.length === 0) {
+        console.warn("⚠️ No CORS origins configured, allowing all");
+        return cb(null, true);
+      }
+      if (ALLOWED_ORIGINS_LIST.includes(origin)) {
+        return cb(null, true);
+      }
+      console.error(`❌ CORS blocked for origin: ${origin}`);
+      console.log("   Allowed origins:", ALLOWED_ORIGINS_LIST);
       return cb(new Error("CORS blocked for origin: " + origin));
     },
     credentials: true,
@@ -533,12 +550,17 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 
     const description = `Order ${orderId} – ${items.length} items`;
 
+    // Gebruik nieuwe URL als fallback als FRONTEND_URL niet is ingesteld
+    const redirectBaseUrl = FRONTEND_URL || "https://momena.nl";
+    const redirectUrl = `${redirectBaseUrl}/bedankt?orderId=${encodeURIComponent(orderId)}`;
+    
+    console.log(`🔗 Redirect URL: ${redirectUrl}`);
+    console.log(`📦 Order ${orderId}: ${items.length} items, Total: €${total.toFixed(2)}`);
+
     const payment = await mollie("/payments", "POST", {
       amount: { currency: "EUR", value: total.toFixed(2) },
       description,
-      redirectUrl: `${FRONTEND_URL}/bedankt?orderId=${encodeURIComponent(
-        orderId
-      )}`,
+      redirectUrl: redirectUrl,
       webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
       metadata: { orderId, items, sender, senderPrefs, discount, shippingCost, giftWrapCost },
     });
