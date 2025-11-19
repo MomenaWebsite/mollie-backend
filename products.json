@@ -495,5 +495,11 @@
   "price": 9.99,
   "image": "https://framerusercontent.com/images/Mt12oBnQTBkw8oscMBqAxkP5o.png?width=1024&height=1536",
   "stock": 2
+  },
+  {
+  "id": "Cadeau-Inpak-Papier",
+  "name": "Cadeau Inpak Papier",
+  "price": 0.50,
+  "stock": 100
   }
   ]
