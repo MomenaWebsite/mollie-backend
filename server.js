@@ -578,9 +578,8 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 
     const description = `Order ${orderId} – ${items.length} items`;
 
-    // Gebruik nieuwe URL als fallback als FRONTEND_URL niet is ingesteld
-    const redirectBaseUrl = FRONTEND_URL || "https://momena.nl";
-    const redirectUrl = `${redirectBaseUrl}/bedankt?orderId=${encodeURIComponent(orderId)}`;
+    // Gebruik www.momena.nl/bedankt met orderId voor redirect na betaling
+    const redirectUrl = `https://www.momena.nl/bedankt?orderId=${encodeURIComponent(orderId)}`;
     
     console.log(`🔗 Redirect URL: ${redirectUrl}`);
     console.log(`📦 Order ${orderId}: ${items.length} items, Total: €${total.toFixed(2)}`);
