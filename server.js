@@ -912,6 +912,18 @@ app.post("/api/mollie/webhook", async (req, res) => {
         }
         stockAdjustedOrders.add(orderId);
       }
+
+      // Verstuur email wanneer betaling is betaald en email nog niet is verzonden
+      if (status === "paid" && !emailsSent.has(orderId)) {
+        const orderData = orderDataByOrderId.get(orderId);
+        if (orderData) {
+          await sendOrderConfirmationEmail({
+            ...orderData,
+            orderId,
+          });
+          emailsSent.add(orderId);
+        }
+      }
     }
 
     console.log(`🔔 ${orderId || "unknown order"} -> ${status}`);
