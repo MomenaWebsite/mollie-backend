@@ -46,6 +46,12 @@ function parseOrigins(input) {
 }
 const ALLOWED_ORIGINS = parseOrigins(FRONTEND_URL);
 
+// Helper om de primaire frontend URL te krijgen (eerste URL uit de lijst)
+function getPrimaryFrontendUrl() {
+  const origins = parseOrigins(FRONTEND_URL);
+  return origins.length > 0 ? origins[0] : FRONTEND_URL || "";
+}
+
 app.use(
   cors({
     origin: (origin, cb) => {
@@ -892,10 +898,11 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 
     const description = `Order ${orderId} – ${items.length} items`;
 
+    const primaryFrontendUrl = getPrimaryFrontendUrl();
     const payment = await mollie("/payments", "POST", {
       amount: { currency: "EUR", value: total.toFixed(2) },
       description,
-      redirectUrl: `${FRONTEND_URL}/bedankt?orderId=${encodeURIComponent(
+      redirectUrl: `${primaryFrontendUrl}/bedankt?orderId=${encodeURIComponent(
         orderId
       )}`,
       webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
@@ -1036,5 +1043,7 @@ app.get("/api/payment-status", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ Server on :${PORT}`);
   console.log(`FRONTEND_URL: ${FRONTEND_URL}`);
+  console.log(`Allowed CORS origins: ${ALLOWED_ORIGINS.join(", ") || "none"}`);
+  console.log(`Primary frontend URL: ${getPrimaryFrontendUrl()}`);
   console.log(`PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}`);
 });
