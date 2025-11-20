@@ -497,11 +497,8 @@ app.post("/api/forgot-password", async (req, res) => {
       email
     )}`;
     
-    // --- HIER MOET U UW E-MAIL LOGICA PLAATSEN ---
-    // Voor nu loggen we de link:
-    console.log(`🔑 Wachtwoord Reset Token voor ${email}: ${resetToken}`);
-    console.log(`📧 Reset Link: ${resetLink}`);
-    // ----------------------------------------------
+    // Verstuur email met reset link
+    await sendPasswordResetEmail(email, resetLink);
 
     res.json({
       ok: true,
@@ -804,6 +801,79 @@ ${discount > 0 ? `Korting: -${formatEUR(discount)}\n` : ""}${shippingCost > 0 ? 
 
 Bedankt voor je bestelling! We verwerken deze zo snel mogelijk.
   `.trim();
+}
+
+async function sendPasswordResetEmail(email, resetLink) {
+  if (!SENDGRID_API_KEY) {
+    console.warn("⚠️ SENDGRID_API_KEY niet ingesteld, email niet verzonden");
+    console.log(`📧 Reset Link (niet verzonden): ${resetLink}`);
+    return;
+  }
+
+  try {
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h1 style="color: #333; margin-top: 0;">Wachtwoord opnieuw instellen</h1>
+            
+            <p>Je hebt aangevraagd om je wachtwoord opnieuw in te stellen voor je account.</p>
+            
+            <p>Klik op de onderstaande link om je wachtwoord opnieuw in te stellen:</p>
+            
+            <div style="margin: 24px 0; text-align: center;">
+              <a href="${resetLink}" style="display: inline-block; padding: 12px 24px; background: #333; color: #fff; text-decoration: none; border-radius: 4px; font-weight: 600;">
+                Wachtwoord opnieuw instellen
+              </a>
+            </div>
+            
+            <p style="font-size: 14px; color: #666;">
+              Of kopieer en plak deze link in je browser:<br/>
+              <a href="${resetLink}" style="color: #333; word-break: break-all;">${resetLink}</a>
+            </p>
+            
+            <p style="font-size: 14px; color: #666; margin-top: 24px;">
+              Deze link is 1 uur geldig. Als je deze aanvraag niet hebt gedaan, negeer deze email dan.
+            </p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const textContent = `
+WACHTWOORD OPNIEUW INSTELLEN
+
+Je hebt aangevraagd om je wachtwoord opnieuw in te stellen voor je account.
+
+Klik op de onderstaande link om je wachtwoord opnieuw in te stellen:
+
+${resetLink}
+
+Deze link is 1 uur geldig. Als je deze aanvraag niet hebt gedaan, negeer deze email dan.
+    `.trim();
+
+    await sgMail.send({
+      to: email,
+      from: EMAIL_FROM,
+      subject: "Wachtwoord opnieuw instellen",
+      text: textContent,
+      html: htmlContent,
+    });
+    
+    console.log(`✅ Wachtwoord reset email verzonden naar: ${email}`);
+  } catch (error) {
+    console.error("❌ Fout bij verzenden wachtwoord reset email:", error);
+    if (error.response) {
+      console.error("SendGrid error details:", error.response.body);
+    }
+    // Log de link als fallback
+    console.log(`📧 Reset Link (fallback): ${resetLink}`);
+  }
 }
 
 async function sendOrderConfirmationEmail(orderData) {
