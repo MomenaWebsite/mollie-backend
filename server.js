@@ -551,11 +551,19 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
     const sender = req.body?.sender || null;
     const senderPrefs = req.body?.senderPrefs || {};
     const orderId = req.body?.orderId || `order_${Date.now()}`;
+    
+    // Haal discount, shippingCost en giftWrapCost uit de request body
+    const discount = Number(req.body?.discount || 0);
+    const shippingCost = Number(req.body?.shippingCost || 0);
+    const giftWrapCost = Number(req.body?.giftWrapCost || 0);
 
     const catalog = loadCatalog();
-    const total = calcTotal(items, catalog);
+    const subtotal = calcTotal(items, catalog);
+    
+    // Bereken het totaal inclusief discount, verzendkosten en inpakkosten
+    const total = Math.max(0, subtotal - discount + shippingCost + giftWrapCost);
 
-    if (!total || total <= 0) {
+    if (!subtotal || subtotal <= 0) {
       return res.status(400).json({ error: "Cart is empty or invalid" });
     }
 
@@ -573,7 +581,7 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
         orderId
       )}`,
       webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
-      metadata: { orderId, items, sender, senderPrefs },
+      metadata: { orderId, items, sender, senderPrefs, discount, shippingCost, giftWrapCost },
     });
 
     if (payment?.metadata?.orderId && payment?.id) {
