@@ -237,6 +237,8 @@ function updateStockForItems(items) {
 const statusesByOrderId = new Map();
 const paymentIdByOrderId = new Map();
 const stockAdjustedOrders = new Set();
+// Sla volledige order data op om metadata klein te houden
+const orderDataByOrderId = new Map();
 
 /* ------------ Users (DB via Prisma) ------------ */
 async function findUserByEmail(email) {
@@ -574,6 +576,19 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 
     const description = `Order ${orderId} – ${items.length} items`;
 
+    // Sla volledige order data op in-memory (om metadata klein te houden)
+    orderDataByOrderId.set(orderId, {
+      items,
+      sender,
+      senderPrefs,
+      discount,
+      shippingCost,
+      giftWrapCost,
+      subtotal,
+      total,
+    });
+
+    // Stuur alleen orderId in Mollie metadata (binnen 1024 bytes limiet)
     const payment = await mollie("/payments", "POST", {
       amount: { currency: "EUR", value: total.toFixed(2) },
       description,
@@ -581,7 +596,7 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
         orderId
       )}`,
       webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
-      metadata: { orderId, items, sender, senderPrefs, discount, shippingCost, giftWrapCost },
+      metadata: { orderId },
     });
 
     if (payment?.metadata?.orderId && payment?.id) {
@@ -616,7 +631,9 @@ app.post("/api/mollie/webhook", async (req, res) => {
         (status === "paid" || status === "authorized") &&
         !stockAdjustedOrders.has(orderId)
       ) {
-        const items = extractItemsFromMetadata(payment.metadata);
+        // Haal items uit in-memory storage in plaats van metadata
+        const orderData = orderDataByOrderId.get(orderId);
+        const items = orderData?.items || extractItemsFromMetadata(payment.metadata);
         const changed = updateStockForItems(items);
         if (changed) {
           console.log(`📦 Voorraad bijgewerkt voor ${orderId}`);
@@ -700,13 +717,32 @@ app.get("/api/order-details", async (req, res) => {
       return res.status(404).json({ error: "Payment not found" });
     }
 
-    const metadata = payment.metadata || {};
-    const items = extractItemsFromMetadata(metadata);
-    const sender = metadata.sender || null;
-    const senderPrefs = metadata.senderPrefs || {};
-    const discount = Number(metadata.discount || 0);
-    const shippingCost = Number(metadata.shippingCost || 0);
-    const giftWrapCost = Number(metadata.giftWrapCost || 0);
+    // Haal order data uit in-memory storage (fallback naar metadata voor oude orders)
+    const orderData = orderDataByOrderId.get(orderId);
+    let items, sender, senderPrefs, discount, shippingCost, giftWrapCost, subTotal, total;
+    
+    if (orderData) {
+      // Nieuwe orders: gebruik in-memory data
+      items = orderData.items || [];
+      sender = orderData.sender || null;
+      senderPrefs = orderData.senderPrefs || {};
+      discount = Number(orderData.discount || 0);
+      shippingCost = Number(orderData.shippingCost || 0);
+      giftWrapCost = Number(orderData.giftWrapCost || 0);
+      subTotal = Number(orderData.subtotal || 0);
+      total = Number(orderData.total || 0);
+    } else {
+      // Oude orders: fallback naar metadata (voor backwards compatibility)
+      const metadata = payment.metadata || {};
+      items = extractItemsFromMetadata(metadata);
+      sender = metadata.sender || null;
+      senderPrefs = metadata.senderPrefs || {};
+      discount = Number(metadata.discount || 0);
+      shippingCost = Number(metadata.shippingCost || 0);
+      giftWrapCost = Number(metadata.giftWrapCost || 0);
+      subTotal = 0; // Wordt later berekend
+      total = 0; // Wordt later berekend
+    }
 
     // Enrich items met product informatie
     const catalog = loadCatalog();
@@ -726,11 +762,9 @@ app.get("/api/order-details", async (req, res) => {
       };
     });
 
-    // Bereken subtotaal
-    const subTotal = enrichedItems.reduce((sum, item) => sum + item.lineTotal, 0);
-    
-    // Bereken totaal
-    const total = Math.max(0, subTotal - discount + shippingCost + giftWrapCost);
+    // Gebruik opgeslagen subtotaal/totaal als beschikbaar, anders bereken
+    const finalSubTotal = subTotal > 0 ? subTotal : enrichedItems.reduce((sum, item) => sum + item.lineTotal, 0);
+    const finalTotal = total > 0 ? total : Math.max(0, finalSubTotal - discount + shippingCost + giftWrapCost);
 
     // Haal status op
     const status = statusesByOrderId.get(orderId) || payment.status || "unknown";
@@ -741,8 +775,8 @@ app.get("/api/order-details", async (req, res) => {
       status,
       sender,
       discount,
-      subTotal,
-      total,
+      subTotal: finalSubTotal,
+      total: finalTotal,
       items: enrichedItems,
     });
   } catch (e) {
