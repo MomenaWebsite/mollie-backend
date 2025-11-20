@@ -23,13 +23,13 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 
 /* ------------ ENV ------------ */
-// LET OP: U moet de logica voor e-mail verzenden implementeren,
-// of op zijn minst een service zoals Nodemailer of SendGrid instellen.
-// ZONDER E-MAIL IMPLEMENTATIE zal de link alleen in uw console verschijnen.
 const MOLLIE_API_KEY = process.env.MOLLIE_API_KEY;
 const FRONTEND_URL = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-env";
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || "";
+const EMAIL_FROM = process.env.EMAIL_FROM || "noreply@momena.nl";
+const ORDER_EMAIL_TO = "bestellingen@momena.nl";
 
 if (!MOLLIE_API_KEY) console.warn("⚠️ Missing MOLLIE_API_KEY");
 if (!FRONTEND_URL) console.warn("⚠️ Missing FRONTEND_URL");
@@ -46,57 +46,12 @@ function parseOrigins(input) {
 }
 const ALLOWED_ORIGINS = parseOrigins(FRONTEND_URL);
 
-// Voeg ook de nieuwe URL toe aan allowed origins (tijdelijk beide URLs toestaan)
-const ALLOWED_ORIGINS_LIST = [
-  ...ALLOWED_ORIGINS,
-  "https://momena.nl",
-  "https://www.momena.nl",
-  "https://momenatest.framer.website", // Oude URL tijdelijk toestaan voor overgang
-].filter((url, index, self) => self.indexOf(url) === index); // Remove duplicates
-
-// Functie om te checken of een origin is toegestaan (inclusief Framer development URLs)
-function isOriginAllowed(origin) {
-  if (!origin) return true;
-  
-  // Exacte match
-  if (ALLOWED_ORIGINS_LIST.includes(origin)) {
-    return true;
-  }
-  
-  // Framer Canvas URLs toestaan (alle *.framercanvas.com subdomeinen)
-  if (origin.match(/^https:\/\/[a-z0-9-]+\.framercanvas\.com$/)) {
-    return true;
-  }
-  
-  // Framer Screenshot URLs toestaan (alle *.framer.invalid subdomeinen)
-  if (origin.match(/^https:\/\/[a-z0-9-]+\.framer\.invalid$/)) {
-    return true;
-  }
-  
-  // Framer Website URLs toestaan (alle *.framer.website subdomeinen)
-  if (origin.match(/^https:\/\/[a-z0-9-]+\.framer\.website$/)) {
-    return true;
-  }
-  
-  return false;
-}
-
-console.log("🌐 Allowed CORS origins:", ALLOWED_ORIGINS_LIST);
-console.log("🌐 Framer development URLs (framercanvas.com, framer.invalid, framer.website) are also allowed");
-
 app.use(
   cors({
     origin: (origin, cb) => {
       if (!origin) return cb(null, true);
-      if (ALLOWED_ORIGINS_LIST.length === 0) {
-        console.warn("⚠️ No CORS origins configured, allowing all");
-        return cb(null, true);
-      }
-      if (isOriginAllowed(origin)) {
-        return cb(null, true);
-      }
-      console.error(`❌ CORS blocked for origin: ${origin}`);
-      console.log("   Allowed origins:", ALLOWED_ORIGINS_LIST);
+      if (ALLOWED_ORIGINS.length === 0) return cb(null, true);
+      if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
       return cb(new Error("CORS blocked for origin: " + origin));
     },
     credentials: true,
@@ -239,10 +194,369 @@ function updateStockForItems(items) {
   return changed;
 }
 
+/* ------------ Email functions ------------ */
+function formatEUR(n) {
+  return new Intl.NumberFormat("nl-NL", {
+    style: "currency",
+    currency: "EUR",
+  }).format(n);
+}
+
+function generateOrderEmailHTML(orderData) {
+  const {
+    orderId,
+    items = [],
+    sender = {},
+    discount = 0,
+    shippingCost = 0,
+    giftWrapCost = 0,
+    subTotal = 0,
+    total = 0,
+  } = orderData;
+
+  const itemsHTML = items
+    .map((item) => {
+      const productName = item.name || item.id;
+      const qty = item.qty || 1;
+      const price = item.price || 0;
+      const lineTotal = price * qty;
+      const imageUrl = item.image || null;
+      const imageHTML = imageUrl
+        ? `<img src="${imageUrl}" alt="${productName}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; margin-right: 12px;" />`
+        : `<div style="width: 80px; height: 80px; background: #f0f0f0; border-radius: 8px; margin-right: 12px; display: flex; align-items: center; justify-content: center; color: #999; font-size: 12px;">Geen afbeelding</div>`;
+      
+      return `
+        <tr>
+          <td style="padding: 16px; border-bottom: 1px solid #eee; vertical-align: top;">
+            <div style="display: flex; align-items: center;">
+              ${imageHTML}
+              <div>
+                <div style="font-weight: 600; margin-bottom: 4px;">${productName}</div>
+                ${item.note ? `<div style="font-size: 12px; color: #666; margin-top: 4px;">Notitie: ${item.note}</div>` : ""}
+              </div>
+            </div>
+          </td>
+          <td style="padding: 16px; border-bottom: 1px solid #eee; text-align: center; vertical-align: top;">${qty}</td>
+          <td style="padding: 16px; border-bottom: 1px solid #eee; text-align: right; vertical-align: top; font-weight: 600;">${formatEUR(lineTotal)}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+      line-height: 1.6; 
+      color: #333; 
+      margin: 0; 
+      padding: 0; 
+      background-color: #f5f5f5;
+    }
+    .email-container { 
+      max-width: 600px; 
+      margin: 0 auto; 
+      background: #ffffff;
+    }
+    .header { 
+      background: linear-gradient(135deg, #ff6b9d 0%, #ff8fab 100%); 
+      padding: 40px 20px; 
+      text-align: center;
+      color: white;
+    }
+    .header h1 { 
+      margin: 0; 
+      font-size: 28px; 
+      font-weight: 700;
+    }
+    .header p { 
+      margin: 10px 0 0 0; 
+      font-size: 16px; 
+      opacity: 0.95;
+    }
+    .content { 
+      padding: 30px 20px; 
+    }
+    .order-number {
+      background: #f8f9fa;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+    .order-number strong {
+      color: #ff6b9d;
+      font-size: 16px;
+    }
+    table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      margin: 24px 0; 
+      background: #fff;
+    }
+    table thead {
+      background: #f8f9fa;
+    }
+    table th {
+      padding: 12px 16px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 14px;
+      color: #333;
+      border-bottom: 2px solid #dee2e6;
+    }
+    table th:last-child {
+      text-align: right;
+    }
+    table th:nth-child(2) {
+      text-align: center;
+    }
+    .total-section {
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 2px solid #dee2e6;
+    }
+    .total-row { 
+      font-weight: 600; 
+      font-size: 16px;
+      padding: 8px 0;
+    }
+    .total-row.final {
+      font-size: 20px;
+      font-weight: 700;
+      color: #ff6b9d;
+      padding-top: 16px;
+      border-top: 2px solid #dee2e6;
+      margin-top: 8px;
+    }
+    .discount-row {
+      color: #28a745;
+    }
+    .footer { 
+      margin-top: 40px; 
+      padding-top: 24px; 
+      border-top: 1px solid #eee; 
+      font-size: 14px; 
+      color: #666; 
+      text-align: center;
+      background: #f8f9fa;
+      padding: 24px 20px;
+    }
+    .sender-info {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      margin-top: 24px;
+    }
+    .sender-info h3 {
+      margin: 0 0 12px 0;
+      font-size: 16px;
+      color: #333;
+    }
+    .sender-info p {
+      margin: 4px 0;
+      font-size: 14px;
+      line-height: 1.8;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">
+      <h1>Bedankt voor je bestelling!</h1>
+      <p>We gaan aan de slag!</p>
+    </div>
+    <div class="content">
+      <div class="order-number">
+        <strong>Ordernummer:</strong> ${orderId}
+      </div>
+      
+      <h2 style="margin: 0 0 16px 0; font-size: 20px; color: #333;">Besteloverzicht</h2>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Aantal</th>
+            <th>Prijs</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsHTML}
+        </tbody>
+      </table>
+      
+      <div class="total-section">
+        <div class="total-row" style="text-align: right;">
+          <span style="float: left;">Subtotaal:</span>
+          <span>${formatEUR(subTotal)}</span>
+        </div>
+        ${discount > 0 ? `
+        <div class="total-row discount-row" style="text-align: right;">
+          <span style="float: left;">Bulk korting:</span>
+          <span>-${formatEUR(discount)}</span>
+        </div>
+        ` : ""}
+        <div class="total-row" style="text-align: right;">
+          <span style="float: left;">Verzendkosten:</span>
+          <span>${formatEUR(shippingCost)}</span>
+        </div>
+        ${giftWrapCost > 0 ? `
+        <div class="total-row" style="text-align: right;">
+          <span style="float: left;">Cadeau inpakken:</span>
+          <span>${formatEUR(giftWrapCost)}</span>
+        </div>
+        ` : ""}
+        <div class="total-row final" style="text-align: right;">
+          <span style="float: left;">Totaal:</span>
+          <span>${formatEUR(total)}</span>
+        </div>
+      </div>
+      
+      ${sender.email ? `
+      <div class="sender-info">
+        <h3>Afzender gegevens</h3>
+        <p>
+          <strong>${sender.firstName || ""} ${sender.lastName || ""}</strong><br>
+          ${sender.streetAndNumber || sender.street || ""} ${sender.number || ""}<br>
+          ${sender.postalCode || ""} ${sender.city || ""}<br>
+          ${sender.country || ""}<br>
+          <br>
+          E-mail: ${sender.email}<br>
+          ${sender.phone ? `Telefoon: ${sender.phone}` : ""}
+        </p>
+      </div>
+      ` : ""}
+    </div>
+    <div class="footer">
+      <p style="margin: 0 0 8px 0;"><strong>We gaan aan de slag met je bestelling!</strong></p>
+      <p style="margin: 0;">Met vriendelijke groet,<br>Het Momena team</p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+}
+
+function generateOrderEmailText(orderData) {
+  const {
+    orderId,
+    items = [],
+    sender = {},
+    discount = 0,
+    shippingCost = 0,
+    giftWrapCost = 0,
+    subTotal = 0,
+    total = 0,
+  } = orderData;
+
+  let text = `Bedankt voor je bestelling!\n\n`;
+  text += `We gaan aan de slag!\n\n`;
+  text += `Ordernummer: ${orderId}\n\n`;
+  text += `Besteloverzicht:\n`;
+  text += `${"=".repeat(60)}\n\n`;
+
+  items.forEach((item) => {
+    const productName = item.name || item.id;
+    const qty = item.qty || 1;
+    const price = item.price || 0;
+    const lineTotal = price * qty;
+    text += `${productName}${item.note ? ` (Notitie: ${item.note})` : ""}\n`;
+    text += `  Aantal: ${qty} x ${formatEUR(price)} = ${formatEUR(lineTotal)}\n\n`;
+  });
+
+  text += `${"-".repeat(60)}\n`;
+  text += `Subtotaal: ${formatEUR(subTotal)}\n`;
+  if (discount > 0) {
+    text += `Bulk korting: -${formatEUR(discount)}\n`;
+  }
+  text += `Verzendkosten: ${formatEUR(shippingCost)}\n`;
+  if (giftWrapCost > 0) {
+    text += `Cadeau inpakken: ${formatEUR(giftWrapCost)}\n`;
+  }
+  text += `Totaal: ${formatEUR(total)}\n\n`;
+
+  if (sender.email) {
+    text += `Afzender gegevens:\n`;
+    text += `${"-".repeat(60)}\n`;
+    text += `${sender.firstName || ""} ${sender.lastName || ""}\n`;
+    text += `${sender.streetAndNumber || sender.street || ""} ${sender.number || ""}\n`;
+    text += `${sender.postalCode || ""} ${sender.city || ""}\n`;
+    text += `${sender.country || ""}\n`;
+    text += `E-mail: ${sender.email}\n`;
+    if (sender.phone) {
+      text += `Telefoon: ${sender.phone}\n`;
+    }
+    text += `\n`;
+  }
+
+  text += `We gaan aan de slag met je bestelling!\n`;
+  text += `Met vriendelijke groet,\nHet Momena team`;
+
+  return text;
+}
+
+async function sendOrderConfirmationEmail(orderData, recipientEmail) {
+  if (!recipientEmail) {
+    console.warn("⚠️ Geen e-mailadres gevonden voor order bevestiging");
+    return false;
+  }
+
+  if (!SENDGRID_API_KEY) {
+    console.warn("⚠️ SENDGRID_API_KEY niet ingesteld - email wordt niet verstuurd");
+    console.log("📧 Email zou worden verstuurd naar:", recipientEmail);
+    console.log("📧 Order ID:", orderData.orderId);
+    return false;
+  }
+
+  try {
+    const html = generateOrderEmailHTML(orderData);
+    const text = generateOrderEmailText(orderData);
+
+    const sendgridResponse = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SENDGRID_API_KEY}`,
+      },
+      body: JSON.stringify({
+        personalizations: [
+          {
+            to: [{ email: recipientEmail }],
+          },
+        ],
+        from: { email: EMAIL_FROM, name: "Momena" },
+        subject: `Bestelbevestiging ${orderData.orderId}`,
+        content: [
+          { type: "text/plain", value: text },
+          { type: "text/html", value: html },
+        ],
+      }),
+    });
+
+    if (!sendgridResponse.ok) {
+      const errorText = await sendgridResponse.text();
+      throw new Error(`SendGrid API error: ${sendgridResponse.status} - ${errorText}`);
+    }
+
+    console.log(`✅ Email verstuurd naar ${recipientEmail} voor order ${orderData.orderId}`);
+    return true;
+  } catch (e) {
+    console.error(`❌ Fout bij versturen email naar ${recipientEmail}:`, e.message);
+    return false;
+  }
+}
+
 /* ------------ In-memory order status ------------ */
 const statusesByOrderId = new Map();
 const paymentIdByOrderId = new Map();
 const stockAdjustedOrders = new Set();
+const emailsSent = new Set(); // Track welke orders al een email hebben gehad
 
 /* ------------ Users (DB via Prisma) ------------ */
 async function findUserByEmail(email) {
@@ -578,16 +892,12 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
 
     const description = `Order ${orderId} – ${items.length} items`;
 
-    // Gebruik www.momena.nl/bedankt met orderId voor redirect na betaling
-    const redirectUrl = `https://www.momena.nl/bedankt?orderId=${encodeURIComponent(orderId)}`;
-    
-    console.log(`🔗 Redirect URL: ${redirectUrl}`);
-    console.log(`📦 Order ${orderId}: ${items.length} items, Total: €${total.toFixed(2)}`);
-
     const payment = await mollie("/payments", "POST", {
       amount: { currency: "EUR", value: total.toFixed(2) },
       description,
-      redirectUrl: redirectUrl,
+      redirectUrl: `${FRONTEND_URL}/bedankt?orderId=${encodeURIComponent(
+        orderId
+      )}`,
       webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
       metadata: { orderId, items, sender, senderPrefs, discount, shippingCost, giftWrapCost },
     });
@@ -631,6 +941,69 @@ app.post("/api/mollie/webhook", async (req, res) => {
         }
         stockAdjustedOrders.add(orderId);
       }
+
+      // Verstuur orderbevestiging emails wanneer betaling is betaald
+      if (status === "paid" && !emailsSent.has(orderId)) {
+        try {
+          const metadata = payment.metadata || {};
+          const items = extractItemsFromMetadata(metadata);
+          const catalog = loadCatalog();
+
+          // Verrijk items met product informatie
+          const enrichedItems = items.map((item) => {
+            const product = catalog.find((p) => p.id === item.id);
+            const qty = Number(item.qty || 1);
+            const price = product?.price || 0;
+            return {
+              id: item.id,
+              name: product?.name || item.id,
+              price: price,
+              image: product?.image || null,
+              qty: qty,
+              note: item.note || undefined,
+            };
+          });
+
+          // Bereken totalen
+          const subTotal = enrichedItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+          const discount = Number(metadata.discount || 0);
+          const shippingCost = Number(metadata.shippingCost || 0);
+          const giftWrapCost = Number(metadata.giftWrapCost || 0);
+          const total = Math.max(0, subTotal - discount + shippingCost + giftWrapCost);
+
+          const orderData = {
+            orderId: metadata.orderId || orderId,
+            items: enrichedItems,
+            sender: metadata.sender || {},
+            discount: discount,
+            shippingCost: shippingCost,
+            giftWrapCost: giftWrapCost,
+            subTotal: subTotal,
+            total: total,
+          };
+
+          // Verstuur email naar klant
+          const customerEmail = metadata.sender?.email;
+          if (customerEmail) {
+            const emailSent = await sendOrderConfirmationEmail(orderData, customerEmail);
+            if (emailSent) {
+              console.log(`✅ Email verstuurd naar klant: ${customerEmail}`);
+            }
+          }
+
+          // Verstuur email naar bestellingen@momena.nl
+          const adminEmailSent = await sendOrderConfirmationEmail(orderData, ORDER_EMAIL_TO);
+          if (adminEmailSent) {
+            console.log(`✅ Email verstuurd naar ${ORDER_EMAIL_TO}`);
+          }
+
+          if (customerEmail || adminEmailSent) {
+            emailsSent.add(orderId);
+          }
+        } catch (emailError) {
+          console.error(`❌ Fout bij versturen emails voor order ${orderId}:`, emailError);
+        }
+      }
     }
 
     console.log(`🔔 ${orderId || "unknown order"} -> ${status}`);
@@ -647,70 +1020,6 @@ app.get("/api/order-status", (req, res) => {
   const status = statusesByOrderId.get(orderId) || "unknown";
   const paymentId = paymentIdByOrderId.get(orderId) || null;
   res.json({ orderId, status, paymentId });
-});
-
-app.get("/api/order-details", async (req, res) => {
-  const orderId = req.query.orderId;
-  if (!orderId) return res.status(400).json({ error: "orderId required" });
-
-  try {
-    // Haal paymentId op uit de map
-    const paymentId = paymentIdByOrderId.get(orderId);
-    if (!paymentId) {
-      return res.status(404).json({ error: "Order not found" });
-    }
-
-    // Haal payment op van Mollie
-    const payment = await mollie(`/payments/${paymentId}`, "GET");
-    if (!payment || !payment.metadata) {
-      return res.status(404).json({ error: "Order metadata not found" });
-    }
-
-    const metadata = payment.metadata;
-    const items = extractItemsFromMetadata(metadata);
-    const catalog = loadCatalog();
-
-    // Verrijk items met product informatie
-    const enrichedItems = items.map((item) => {
-      const product = catalog.find((p) => p.id === item.id);
-      const qty = Number(item.qty || 1);
-      const price = product?.price || 0;
-      
-      return {
-        id: item.id,
-        name: product?.name || item.id,
-        price: price,
-        image: product?.image || null,
-        qty: qty,
-        lineTotal: price * qty,
-        sendNow: item.sendNow || false,
-        note: item.note || undefined,
-        shipping: item.shipping || undefined,
-        attachedCandles: item.attachedCandles || undefined,
-      };
-    });
-
-    // Bereken subtotaal en totaal
-    const subTotal = enrichedItems.reduce((sum, item) => sum + item.lineTotal, 0);
-    const discount = Number(metadata.discount || 0);
-    const shippingCost = Number(metadata.shippingCost || 0);
-    const giftWrapCost = Number(metadata.giftWrapCost || 0);
-    const total = Math.max(0, subTotal - discount + shippingCost + giftWrapCost);
-
-    res.json({
-      orderId: metadata.orderId || orderId,
-      paymentId: paymentId,
-      status: payment.status || statusesByOrderId.get(orderId) || "unknown",
-      sender: metadata.sender || null,
-      discount: discount,
-      subTotal: subTotal,
-      total: total,
-      items: enrichedItems,
-    });
-  } catch (e) {
-    console.error("Error fetching order details:", e);
-    res.status(500).json({ error: "Failed to fetch order details" });
-  }
 });
 
 app.get("/api/payment-status", async (req, res) => {
