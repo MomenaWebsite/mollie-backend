@@ -652,6 +652,105 @@ app.get("/api/payment-status", async (req, res) => {
   }
 });
 
+app.get("/api/order-details", async (req, res) => {
+  const orderId = req.query.orderId;
+  if (!orderId) {
+    return res.status(400).json({ error: "orderId required" });
+  }
+
+  try {
+    // Probeer paymentId op te halen uit de map
+    let paymentId = paymentIdByOrderId.get(orderId);
+    
+    // Als er geen paymentId is, probeer de status endpoint te gebruiken
+    if (!paymentId) {
+      const status = statusesByOrderId.get(orderId);
+      // Als er geen status is, kunnen we de payment niet vinden
+      if (!status) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+    }
+
+    // Als we nog steeds geen paymentId hebben, proberen we alle payments te doorzoeken
+    // Dit is niet ideaal maar kan nodig zijn als de map leeg is
+    if (!paymentId) {
+      try {
+        const payments = await mollie("/payments", "GET", {
+          limit: 250, // Mollie's maximum
+        });
+        const payment = payments._embedded?.payments?.find(
+          (p) => p.metadata?.orderId === orderId
+        );
+        if (payment) {
+          paymentId = payment.id;
+          paymentIdByOrderId.set(orderId, paymentId);
+        }
+      } catch (e) {
+        console.error("Error searching payments:", e);
+      }
+    }
+
+    if (!paymentId) {
+      return res.status(404).json({ error: "Payment not found for this order" });
+    }
+
+    // Haal payment op van Mollie
+    const payment = await mollie(`/payments/${paymentId}`, "GET");
+    if (!payment) {
+      return res.status(404).json({ error: "Payment not found" });
+    }
+
+    const metadata = payment.metadata || {};
+    const items = extractItemsFromMetadata(metadata);
+    const sender = metadata.sender || null;
+    const senderPrefs = metadata.senderPrefs || {};
+    const discount = Number(metadata.discount || 0);
+    const shippingCost = Number(metadata.shippingCost || 0);
+    const giftWrapCost = Number(metadata.giftWrapCost || 0);
+
+    // Enrich items met product informatie
+    const catalog = loadCatalog();
+    const enrichedItems = items.map((item) => {
+      const product = catalog.find((p) => String(p.id) === String(item.id));
+      return {
+        id: String(item.id || ""),
+        name: product?.name || String(item.id || "Unknown"),
+        price: product?.price || Number(item.price || 0),
+        image: product?.image || null,
+        qty: Number(item.qty || 0),
+        lineTotal: (product?.price || Number(item.price || 0)) * Number(item.qty || 0),
+        sendNow: Boolean(item.sendNow || false),
+        note: item.note || undefined,
+        shipping: item.shipping || undefined,
+        attachedCandles: item.attachedCandles || undefined,
+      };
+    });
+
+    // Bereken subtotaal
+    const subTotal = enrichedItems.reduce((sum, item) => sum + item.lineTotal, 0);
+    
+    // Bereken totaal
+    const total = Math.max(0, subTotal - discount + shippingCost + giftWrapCost);
+
+    // Haal status op
+    const status = statusesByOrderId.get(orderId) || payment.status || "unknown";
+
+    res.json({
+      orderId,
+      paymentId,
+      status,
+      sender,
+      discount,
+      subTotal,
+      total,
+      items: enrichedItems,
+    });
+  } catch (e) {
+    console.error("Error fetching order details:", e);
+    res.status(500).json({ error: "Failed to fetch order details" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`✅ Server on :${PORT}`);
   console.log(`FRONTEND_URL: ${FRONTEND_URL}`);
