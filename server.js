@@ -29,7 +29,9 @@ const FRONTEND_URL = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-env";
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
-const EMAIL_FROM = process.env.EMAIL_FROM || "noreply@momena.nl";
+const EMAIL_SENDER_NAME = process.env.EMAIL_SENDER_NAME || "Momena";
+const EMAIL_FROM_ADDRESS = process.env.EMAIL_FROM || "noreply@momena.nl";
+const EMAIL_FROM = `${EMAIL_SENDER_NAME} <${EMAIL_FROM_ADDRESS}>`;
 const ORDER_EMAIL_TO = process.env.ORDER_EMAIL_TO || "bestellingen@momena.nl";
 
 if (!MOLLIE_API_KEY) console.warn("⚠️ Missing MOLLIE_API_KEY");
