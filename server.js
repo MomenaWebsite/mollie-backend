@@ -14,6 +14,7 @@ const cookieParser = require("cookie-parser");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { PrismaClient } = require("@prisma/client");
+const sgMail = require("@sendgrid/mail");
 const fetch =
   global.fetch ||
   ((...args) => import("node-fetch").then(({ default: f }) => f(...args)));
@@ -23,13 +24,13 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 
 /* ------------ ENV ------------ */
-// LET OP: U moet de logica voor e-mail verzenden implementeren,
-// of op zijn minst een service zoals Nodemailer of SendGrid instellen.
-// ZONDER E-MAIL IMPLEMENTATIE zal de link alleen in uw console verschijnen.
 const MOLLIE_API_KEY = process.env.MOLLIE_API_KEY;
 const FRONTEND_URL = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-env";
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const EMAIL_FROM = process.env.EMAIL_FROM || "noreply@momena.nl";
+const ORDER_EMAIL_TO = process.env.ORDER_EMAIL_TO || "bestellingen@momena.nl";
 
 if (!MOLLIE_API_KEY) console.warn("⚠️ Missing MOLLIE_API_KEY");
 if (!FRONTEND_URL) console.warn("⚠️ Missing FRONTEND_URL");
@@ -37,6 +38,12 @@ if (!PUBLIC_BASE_URL)
   console.warn("⚠️ Missing PUBLIC_BASE_URL (webhookUrl may be invalid)");
 if (JWT_SECRET === "change-me-in-env")
   console.warn("⚠️ Set a strong JWT_SECRET in env");
+if (!SENDGRID_API_KEY) console.warn("⚠️ Missing SENDGRID_API_KEY");
+
+// Configureer SendGrid
+if (SENDGRID_API_KEY) {
+  sgMail.setApiKey(SENDGRID_API_KEY);
+}
 
 /* ------------ CORS & body parsing ------------ */
 function parseOrigins(input) {
@@ -237,6 +244,7 @@ function updateStockForItems(items) {
 const statusesByOrderId = new Map();
 const paymentIdByOrderId = new Map();
 const stockAdjustedOrders = new Set();
+const emailsSent = new Set(); // Voorkom dubbele emails
 // Sla volledige order data op om metadata klein te houden
 const orderDataByOrderId = new Map();
 
@@ -546,6 +554,270 @@ app.post("/api/reset-password", async (req, res) => {
 });
 
 
+/* --------- Email Functions ---------- */
+function formatEUR(n) {
+  return new Intl.NumberFormat("nl-NL", {
+    style: "currency",
+    currency: "EUR",
+  }).format(n);
+}
+
+function generateOrderEmailHTML(orderData) {
+  const {
+    orderId,
+    items,
+    sender,
+    discount,
+    shippingCost,
+    giftWrapCost,
+    subTotal,
+    total,
+  } = orderData;
+
+  const catalog = loadCatalog();
+  
+  // Enrich items met product informatie
+  const enrichedItems = items.map((item) => {
+    const product = catalog.find((p) => String(p.id) === String(item.id));
+    return {
+      ...item,
+      name: product?.name || String(item.id || "Unknown"),
+      price: product?.price || Number(item.price || 0),
+      image: product?.image || null,
+      lineTotal: (product?.price || Number(item.price || 0)) * Number(item.qty || 0),
+    };
+  });
+
+  const itemsHTML = enrichedItems
+    .map((item) => {
+      const imageHTML = item.image
+        ? `<img src="${item.image}" alt="${item.name}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px;" />`
+        : '<div style="width: 80px; height: 80px; background: #f5f5f5; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #999; font-size: 12px;">Geen foto</div>';
+      
+      const sendNowHTML = item.sendNow
+        ? `<div style="margin-top: 8px; padding: 8px; background: #e8f5e9; border-radius: 4px; font-size: 12px; color: #2e7d32;">
+            <strong>Direct verzonden naar:</strong><br/>
+            ${item.shipping?.firstName || ""} ${item.shipping?.lastName || ""}<br/>
+            ${item.shipping?.streetAndNumber || ""}<br/>
+            ${item.shipping?.postalCode || ""} ${item.shipping?.city || ""}<br/>
+            ${item.shipping?.country || ""}<br/>
+            ${item.shipping?.deliveryDate ? `Aankomst: ${item.shipping.deliveryDate}` : ""}
+          </div>`
+        : "";
+
+      const noteHTML = item.note
+        ? `<div style="margin-top: 8px; padding: 8px; background: #fff3e0; border-radius: 4px; font-size: 12px; color: #e65100;">
+            <strong>Bericht:</strong> ${item.note}
+          </div>`
+        : "";
+
+      const attachedCandlesHTML = item.attachedCandles && item.attachedCandles.length > 0
+        ? `<div style="margin-top: 8px; padding: 8px; background: #f3e5f5; border-radius: 4px; font-size: 12px; color: #7b1fa2;">
+            <strong>Meegestuurd:</strong> ${item.attachedCandles.map(c => `${c.qty} x ${c.id}`).join(", ")}
+          </div>`
+        : "";
+
+      return `
+        <tr>
+          <td style="padding: 16px; border-bottom: 1px solid #eee;">
+            <div style="display: flex; gap: 16px;">
+              ${imageHTML}
+              <div style="flex: 1;">
+                <div style="font-weight: 600; margin-bottom: 8px;">${item.name}</div>
+                <div style="font-size: 14px; color: #666;">${item.qty} x ${formatEUR(item.price)}</div>
+                ${sendNowHTML}
+                ${noteHTML}
+                ${attachedCandlesHTML}
+              </div>
+              <div style="text-align: right; font-weight: 600;">${formatEUR(item.lineTotal)}</div>
+            </div>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <h1 style="color: #333; margin-top: 0;">Bestelbevestiging</h1>
+          
+          <div style="margin-bottom: 24px;">
+            <p><strong>Ordernummer:</strong> ${orderId}</p>
+            <p><strong>Datum:</strong> ${new Date().toLocaleString("nl-NL")}</p>
+          </div>
+
+          <div style="margin-bottom: 24px; padding: 16px; background: #f5f5f5; border-radius: 8px;">
+            <h2 style="margin-top: 0; font-size: 18px;">Afzender gegevens</h2>
+            <p>
+              ${sender?.firstName || ""} ${sender?.lastName || ""}<br/>
+              ${sender?.streetAndNumber || ""}<br/>
+              ${sender?.postalCode || ""} ${sender?.city || ""}<br/>
+              ${sender?.country || ""}<br/>
+              <br/>
+              <strong>E-mail:</strong> ${sender?.email || ""}<br/>
+              <strong>Telefoon:</strong> ${sender?.phone || ""}
+            </p>
+          </div>
+
+          <div style="margin-bottom: 24px;">
+            <h2 style="margin-top: 0; font-size: 18px;">Bestelde producten</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+              ${itemsHTML}
+            </table>
+          </div>
+
+          <div style="margin-bottom: 24px; padding: 16px; background: #f5f5f5; border-radius: 8px;">
+            <table style="width: 100%;">
+              <tr>
+                <td style="padding: 8px 0;">Subtotaal:</td>
+                <td style="text-align: right; padding: 8px 0;">${formatEUR(subTotal)}</td>
+              </tr>
+              ${discount > 0 ? `
+              <tr>
+                <td style="padding: 8px 0; color: #0a7f2e;">Korting:</td>
+                <td style="text-align: right; padding: 8px 0; color: #0a7f2e;">- ${formatEUR(discount)}</td>
+              </tr>
+              ` : ""}
+              ${shippingCost > 0 ? `
+              <tr>
+                <td style="padding: 8px 0;">Verzendkosten:</td>
+                <td style="text-align: right; padding: 8px 0;">${formatEUR(shippingCost)}</td>
+              </tr>
+              ` : ""}
+              ${giftWrapCost > 0 ? `
+              <tr>
+                <td style="padding: 8px 0;">Cadeau inpakken:</td>
+                <td style="text-align: right; padding: 8px 0;">${formatEUR(giftWrapCost)}</td>
+              </tr>
+              ` : ""}
+              <tr style="border-top: 2px solid #333;">
+                <td style="padding: 8px 0; font-weight: 700; font-size: 18px;">Totaal:</td>
+                <td style="text-align: right; padding: 8px 0; font-weight: 700; font-size: 18px;">${formatEUR(total)}</td>
+              </tr>
+            </table>
+          </div>
+
+          <p style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #eee; font-size: 14px; color: #666;">
+            Bedankt voor je bestelling! We verwerken deze zo snel mogelijk.
+          </p>
+        </div>
+      </body>
+    </html>
+  `;
+}
+
+function generateOrderEmailText(orderData) {
+  const {
+    orderId,
+    items,
+    sender,
+    discount,
+    shippingCost,
+    giftWrapCost,
+    subTotal,
+    total,
+  } = orderData;
+
+  const catalog = loadCatalog();
+  
+  // Enrich items met product informatie
+  const enrichedItems = items.map((item) => {
+    const product = catalog.find((p) => String(p.id) === String(item.id));
+    return {
+      ...item,
+      name: product?.name || String(item.id || "Unknown"),
+      price: product?.price || Number(item.price || 0),
+      lineTotal: (product?.price || Number(item.price || 0)) * Number(item.qty || 0),
+    };
+  });
+
+  const itemsText = enrichedItems
+    .map((item) => {
+      const sendNowText = item.sendNow
+        ? `\n  Direct verzonden naar:\n  ${item.shipping?.firstName || ""} ${item.shipping?.lastName || ""}\n  ${item.shipping?.streetAndNumber || ""}\n  ${item.shipping?.postalCode || ""} ${item.shipping?.city || ""}\n  ${item.shipping?.country || ""}\n  ${item.shipping?.deliveryDate ? `Aankomst: ${item.shipping.deliveryDate}` : ""}`
+        : "";
+      const noteText = item.note ? `\n  Bericht: ${item.note}` : "";
+      const attachedCandlesText = item.attachedCandles && item.attachedCandles.length > 0
+        ? `\n  Meegestuurd: ${item.attachedCandles.map(c => `${c.qty} x ${c.id}`).join(", ")}`
+        : "";
+      return `- ${item.name} (${item.qty} x ${formatEUR(item.price)}) = ${formatEUR(item.lineTotal)}${sendNowText}${noteText}${attachedCandlesText}`;
+    })
+    .join("\n\n");
+
+  return `
+BESTELBEVESTIGING
+
+Ordernummer: ${orderId}
+Datum: ${new Date().toLocaleString("nl-NL")}
+
+AFZENDER GEGEVENS:
+${sender?.firstName || ""} ${sender?.lastName || ""}
+${sender?.streetAndNumber || ""}
+${sender?.postalCode || ""} ${sender?.city || ""}
+${sender?.country || ""}
+
+E-mail: ${sender?.email || ""}
+Telefoon: ${sender?.phone || ""}
+
+BESTELDE PRODUCTEN:
+${itemsText}
+
+KOSTEN OVERZICHT:
+Subtotaal: ${formatEUR(subTotal)}
+${discount > 0 ? `Korting: -${formatEUR(discount)}\n` : ""}${shippingCost > 0 ? `Verzendkosten: ${formatEUR(shippingCost)}\n` : ""}${giftWrapCost > 0 ? `Cadeau inpakken: ${formatEUR(giftWrapCost)}\n` : ""}Totaal: ${formatEUR(total)}
+
+Bedankt voor je bestelling! We verwerken deze zo snel mogelijk.
+  `.trim();
+}
+
+async function sendOrderConfirmationEmail(orderData) {
+  if (!SENDGRID_API_KEY) {
+    console.warn("⚠️ SENDGRID_API_KEY niet ingesteld, email niet verzonden");
+    return;
+  }
+
+  try {
+    const htmlContent = generateOrderEmailHTML(orderData);
+    const textContent = generateOrderEmailText(orderData);
+    const customerEmail = orderData.sender?.email;
+
+    // Email naar klant
+    if (customerEmail) {
+      await sgMail.send({
+        to: customerEmail,
+        from: EMAIL_FROM,
+        subject: `Bestelbevestiging ${orderData.orderId}`,
+        text: textContent,
+        html: htmlContent,
+      });
+      console.log(`✅ Email verzonden naar klant: ${customerEmail}`);
+    }
+
+    // Email naar bestellingen@momena.nl
+    await sgMail.send({
+      to: ORDER_EMAIL_TO,
+      from: EMAIL_FROM,
+      subject: `Nieuwe bestelling ${orderData.orderId}`,
+      text: textContent,
+      html: htmlContent,
+    });
+    console.log(`✅ Email verzonden naar ${ORDER_EMAIL_TO}`);
+
+  } catch (error) {
+    console.error("❌ Fout bij verzenden email:", error);
+    if (error.response) {
+      console.error("SendGrid error details:", error.response.body);
+    }
+  }
+}
+
 /* --------- Checkout ---------- */
 app.post("/api/create-payment-from-cart", async (req, res) => {
   try {
@@ -639,6 +911,18 @@ app.post("/api/mollie/webhook", async (req, res) => {
           console.log(`📦 Voorraad bijgewerkt voor ${orderId}`);
         }
         stockAdjustedOrders.add(orderId);
+      }
+
+      // Verstuur email wanneer betaling is betaald en email nog niet is verzonden
+      if (status === "paid" && !emailsSent.has(orderId)) {
+        const orderData = orderDataByOrderId.get(orderId);
+        if (orderData) {
+          await sendOrderConfirmationEmail({
+            ...orderData,
+            orderId,
+          });
+          emailsSent.add(orderId);
+        }
       }
     }
 
