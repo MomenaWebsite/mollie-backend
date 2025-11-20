@@ -577,7 +577,7 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
     const payment = await mollie("/payments", "POST", {
       amount: { currency: "EUR", value: total.toFixed(2) },
       description,
-      redirectUrl: `${FRONTEND_URL}/bedankt?orderId=${encodeURIComponent(
+      redirectUrl: `https://www.momena.nl/bedankt?orderId=${encodeURIComponent(
         orderId
       )}`,
       webhookUrl: `${PUBLIC_BASE_URL}/api/mollie/webhook`,
