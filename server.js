@@ -28,13 +28,9 @@ const MOLLIE_API_KEY = process.env.MOLLIE_API_KEY;
 const FRONTEND_URL = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-env";
-// Gebruik EMAIL_PASS voor SendGrid API key (zoals ingesteld in Render)
-const SENDGRID_API_KEY = process.env.EMAIL_PASS;
-// Email sender: gebruik EMAIL_SENDER_NAME als naam, en EMAIL_FROM als adres (of standaard)
-const EMAIL_SENDER_NAME = process.env.EMAIL_SENDER_NAME || "Momena";
-const EMAIL_FROM_ADDRESS = process.env.EMAIL_FROM || "noreply@momena.nl";
-const EMAIL_FROM = `${EMAIL_SENDER_NAME} <${EMAIL_FROM_ADDRESS}>`;
-const ORDER_EMAIL_TO = process.env.ORDERS_FROM || "bestellingen@momena.nl";
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const EMAIL_FROM = process.env.EMAIL_FROM || "noreply@momena.nl";
+const ORDER_EMAIL_TO = process.env.ORDER_EMAIL_TO || "bestellingen@momena.nl";
 
 if (!MOLLIE_API_KEY) console.warn("⚠️ Missing MOLLIE_API_KEY");
 if (!FRONTEND_URL) console.warn("⚠️ Missing FRONTEND_URL");
@@ -42,12 +38,11 @@ if (!PUBLIC_BASE_URL)
   console.warn("⚠️ Missing PUBLIC_BASE_URL (webhookUrl may be invalid)");
 if (JWT_SECRET === "change-me-in-env")
   console.warn("⚠️ Set a strong JWT_SECRET in env");
-if (!SENDGRID_API_KEY) {
-  console.warn("⚠️ Missing EMAIL_PASS (SendGrid API key) - emails worden niet verzonden");
-} else {
-  // Configureer SendGrid alleen als API key aanwezig is
+if (!SENDGRID_API_KEY) console.warn("⚠️ Missing SENDGRID_API_KEY");
+
+// Configureer SendGrid
+if (SENDGRID_API_KEY) {
   sgMail.setApiKey(SENDGRID_API_KEY);
-  console.log("✅ SendGrid geconfigureerd");
 }
 
 /* ------------ CORS & body parsing ------------ */
@@ -916,18 +911,6 @@ app.post("/api/mollie/webhook", async (req, res) => {
           console.log(`📦 Voorraad bijgewerkt voor ${orderId}`);
         }
         stockAdjustedOrders.add(orderId);
-      }
-
-      // Verstuur email wanneer betaling is betaald en email nog niet is verzonden
-      if (status === "paid" && !emailsSent.has(orderId)) {
-        const orderData = orderDataByOrderId.get(orderId);
-        if (orderData) {
-          await sendOrderConfirmationEmail({
-            ...orderData,
-            orderId,
-          });
-          emailsSent.add(orderId);
-        }
       }
     }
 
