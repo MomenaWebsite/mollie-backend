@@ -564,6 +564,32 @@ function formatEUR(n) {
   }).format(n);
 }
 
+// Converteer http URLs naar https voor email veiligheid
+function ensureHttps(url) {
+  if (!url) return null;
+  if (typeof url !== "string") return url;
+  // Als het al https is, return zoals het is
+  if (url.startsWith("https://")) return url;
+  // Converteer http naar https
+  if (url.startsWith("http://")) {
+    return url.replace("http://", "https://");
+  }
+  // Als het een relatief pad is, voeg https:// toe (aanname dat het van dezelfde domain komt)
+  if (url.startsWith("//")) {
+    return "https:" + url;
+  }
+  // Als het geen protocol heeft, voeg https:// toe
+  if (!url.startsWith("http")) {
+    // Als het een absoluut pad is (begint met /), voeg de domain toe
+    if (url.startsWith("/")) {
+      return `https://www.momena.nl${url}`;
+    }
+    // Anders, voeg https:// toe
+    return `https://${url}`;
+  }
+  return url;
+}
+
 function generateOrderEmailHTML(orderData) {
   const {
     orderId,
@@ -592,8 +618,9 @@ function generateOrderEmailHTML(orderData) {
 
   const itemsHTML = enrichedItems
     .map((item) => {
-      const imageHTML = item.image
-        ? `<img src="${item.image}" alt="${item.name}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px;" />`
+      const safeImageUrl = ensureHttps(item.image);
+      const imageHTML = safeImageUrl
+        ? `<img src="${safeImageUrl}" alt="${item.name}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px;" />`
         : '<div style="width: 80px; height: 80px; background: #f5f5f5; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #999; font-size: 12px;">Geen foto</div>';
       
       const sendNowHTML = item.sendNow
