@@ -30,7 +30,7 @@ const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-env";
 // Gebruik EMAIL_PASS voor SendGrid API key (zoals ingesteld in Render)
 const SENDGRID_API_KEY = process.env.EMAIL_PASS;
-// Email sender: gebruik EMAIL_SENDER_NAME als naam, en een standaard email adres
+// Email sender: gebruik EMAIL_SENDER_NAME als naam, en EMAIL_FROM als adres (of standaard)
 const EMAIL_SENDER_NAME = process.env.EMAIL_SENDER_NAME || "Momena";
 const EMAIL_FROM_ADDRESS = process.env.EMAIL_FROM || "noreply@momena.nl";
 const EMAIL_FROM = `${EMAIL_SENDER_NAME} <${EMAIL_FROM_ADDRESS}>`;
@@ -42,11 +42,12 @@ if (!PUBLIC_BASE_URL)
   console.warn("⚠️ Missing PUBLIC_BASE_URL (webhookUrl may be invalid)");
 if (JWT_SECRET === "change-me-in-env")
   console.warn("⚠️ Set a strong JWT_SECRET in env");
-if (!SENDGRID_API_KEY) console.warn("⚠️ Missing EMAIL_PASS (SendGrid API key)");
-
-// Configureer SendGrid
-if (SENDGRID_API_KEY) {
+if (!SENDGRID_API_KEY) {
+  console.warn("⚠️ Missing EMAIL_PASS (SendGrid API key) - emails worden niet verzonden");
+} else {
+  // Configureer SendGrid alleen als API key aanwezig is
   sgMail.setApiKey(SENDGRID_API_KEY);
+  console.log("✅ SendGrid geconfigureerd");
 }
 
 /* ------------ CORS & body parsing ------------ */
