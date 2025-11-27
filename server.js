@@ -1158,6 +1158,8 @@ app.get("/api/order-details", async (req, res) => {
       status,
       sender,
       discount,
+      shippingCost,
+      giftWrapCost,
       subTotal: finalSubTotal,
       total: finalTotal,
       items: enrichedItems,
