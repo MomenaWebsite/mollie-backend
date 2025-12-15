@@ -974,7 +974,7 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
     // Valideer kortingscode als deze is opgegeven (frontend berekent de korting al)
     if (promoCode) {
       const code = promoCode.trim().toUpperCase();
-      if (code !== "NIEUWEMOMENA") {
+      if (code !== "NIEUWEMOMENA" && code !== "WOUTGRATISVERZENDING" && code !== "GRATISVERZENDINGWOUT") {
         return res.status(400).json({ error: "Ongeldige kortingscode" });
       }
     }
