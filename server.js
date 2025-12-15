@@ -595,7 +595,8 @@ function generateOrderEmailHTML(orderData) {
     discount,
     shippingCost,
     giftWrapCost,
-    subTotal,
+    subTotal: subTotalFromData,
+    subtotal: subtotalFromData,
     total,
   } = orderData;
 
@@ -604,14 +605,31 @@ function generateOrderEmailHTML(orderData) {
   // Enrich items met product informatie
   const enrichedItems = items.map((item) => {
     const product = catalog.find((p) => String(p.id) === String(item.id));
+    const price = Number(product?.price) || Number(item.price) || 0;
+    const qty = Number(item.qty) || 0;
+    const lineTotal = price * qty;
     return {
       ...item,
       name: product?.name || String(item.id || "Unknown"),
-      price: product?.price || Number(item.price || 0),
+      price: price,
       image: product?.image || null,
-      lineTotal: (product?.price || Number(item.price || 0)) * Number(item.qty || 0),
+      qty: qty,
+      lineTotal: lineTotal,
     };
   });
+
+  // Bereken subtotaal altijd opnieuw op basis van de items (voorkom NaN)
+  const calculatedSubTotal = enrichedItems.reduce((sum, item) => {
+    const lineTotal = Number(item.lineTotal) || 0;
+    return sum + lineTotal;
+  }, 0);
+  
+  // Gebruik berekend subtotaal, tenzij we een geldig subtotaal hebben uit de data
+  const subTotal = (Number.isFinite(subTotalFromData) && subTotalFromData > 0) 
+    ? Number(subTotalFromData) 
+    : (Number.isFinite(subtotalFromData) && subtotalFromData > 0)
+      ? Number(subtotalFromData)
+      : calculatedSubTotal;
 
   const itemsHTML = enrichedItems
     .map((item) => {
@@ -747,7 +765,8 @@ function generateOrderEmailText(orderData) {
     discount,
     shippingCost,
     giftWrapCost,
-    subTotal,
+    subTotal: subTotalFromData,
+    subtotal: subtotalFromData,
     total,
   } = orderData;
 
@@ -756,13 +775,34 @@ function generateOrderEmailText(orderData) {
   // Enrich items met product informatie
   const enrichedItems = items.map((item) => {
     const product = catalog.find((p) => String(p.id) === String(item.id));
+    const price = Number(product?.price) || Number(item.price) || 0;
+    const qty = Number(item.qty) || 0;
+    const lineTotal = price * qty;
     return {
       ...item,
       name: product?.name || String(item.id || "Unknown"),
-      price: product?.price || Number(item.price || 0),
-      lineTotal: (product?.price || Number(item.price || 0)) * Number(item.qty || 0),
+      price: price,
+      qty: qty,
+      lineTotal: lineTotal,
     };
   });
+
+  // Bereken subtotaal altijd opnieuw op basis van de items (voorkom NaN)
+  const calculatedSubTotal = enrichedItems.reduce((sum, item) => {
+    const lineTotal = Number.isFinite(item.lineTotal) ? Number(item.lineTotal) : 0;
+    if (!Number.isFinite(lineTotal)) {
+      console.warn(`Invalid lineTotal for item ${item.id}:`, item.lineTotal);
+      return sum;
+    }
+    return sum + lineTotal;
+  }, 0);
+  
+  // Gebruik berekend subtotaal, tenzij we een geldig subtotaal hebben uit de data
+  const subTotal = (Number.isFinite(subTotalFromData) && subTotalFromData > 0) 
+    ? Number(subTotalFromData) 
+    : (Number.isFinite(subtotalFromData) && subtotalFromData > 0)
+      ? Number(subtotalFromData)
+      : (Number.isFinite(calculatedSubTotal) ? calculatedSubTotal : 0);
 
   const itemsText = enrichedItems
     .map((item) => {
@@ -927,13 +967,22 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
     
     // Haal discount, shippingCost en giftWrapCost uit de request body
     const discount = Number(req.body?.discount || 0);
+    const promoCode = req.body?.promoCode || null;
     const shippingCost = Number(req.body?.shippingCost || 0);
     const giftWrapCost = Number(req.body?.giftWrapCost || 0);
+
+    // Valideer kortingscode als deze is opgegeven (frontend berekent de korting al)
+    if (promoCode) {
+      const code = promoCode.trim().toUpperCase();
+      if (code !== "NIEUWEMOMENA") {
+        return res.status(400).json({ error: "Ongeldige kortingscode" });
+      }
+    }
 
     const catalog = loadCatalog();
     const subtotal = calcTotal(items, catalog);
     
-    // Bereken het totaal inclusief discount, verzendkosten en inpakkosten
+    // Bereken het totaal inclusief discount (al inclusief bulk + kortingscode korting), verzendkosten en inpakkosten
     const total = Math.max(0, subtotal - discount + shippingCost + giftWrapCost);
 
     if (!subtotal || subtotal <= 0) {
@@ -952,7 +1001,8 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
       items,
       sender,
       senderPrefs,
-      discount,
+      discount, // Totale korting (bulk + kortingscode, al berekend in frontend)
+      promoCode: promoCode,
       shippingCost,
       giftWrapCost,
       subtotal,
