@@ -159,8 +159,10 @@ function readStockMap() {
 function writeStockMap(stockMap) {
   try {
     fs.writeFileSync(STOCK_PATH, JSON.stringify(stockMap, null, 2));
+    return true;
   } catch (e) {
     console.error("Kon stock.json niet schrijven:", e.message);
+    return false;
   }
 }
 
@@ -185,6 +187,20 @@ function writeCatalogState(state) {
   // NIET meer schrijven naar products.json - alleen lezen
   // Voorraad wordt nu in stock.json beheerd
   console.warn("writeCatalogState wordt aangeroepen maar products.json wordt niet meer geschreven (voorraad in stock.json)");
+}
+
+// Schrijf products.json (alleen voor admin interface)
+function writeProductsFile(products) {
+  try {
+    if (!Array.isArray(products)) {
+      throw new Error("Products must be an array");
+    }
+    fs.writeFileSync(PRODUCTS_PATH, JSON.stringify(products, null, 2));
+    return true;
+  } catch (e) {
+    console.error("Kon products.json niet schrijven:", e.message);
+    return false;
+  }
 }
 
 function normalizeProduct(p, stockMap = {}) {
@@ -1281,6 +1297,164 @@ app.get("/api/order-details", async (req, res) => {
   } catch (e) {
     console.error("Error fetching order details:", e);
     res.status(500).json({ error: "Failed to fetch order details" });
+  }
+});
+
+// =======================
+// ADMIN API ENDPOINTS
+// =======================
+
+// Haal alle producten op met voorraad
+app.get("/api/admin/products", async (req, res) => {
+  try {
+    const catalog = loadCatalog();
+    const stockMap = readStockMap();
+    
+    const productsWithStock = catalog.map((product) => ({
+      ...product,
+      stock: stockMap[product.id] !== undefined ? stockMap[product.id] : product.stock || 0,
+    }));
+    
+    res.json({ products: productsWithStock });
+  } catch (e) {
+    console.error("Error fetching admin products:", e);
+    res.status(500).json({ error: "Failed to fetch products" });
+  }
+});
+
+// Voeg nieuw product toe
+app.post("/api/admin/products", async (req, res) => {
+  try {
+    const { id, name, price, image, stock } = req.body;
+    
+    if (!id || !name || price === undefined) {
+      return res.status(400).json({ error: "id, name en price zijn verplicht" });
+    }
+    
+    const state = readCatalogState();
+    const products = state.list || [];
+    
+    // Check of product al bestaat
+    if (products.find((p) => String(p.id) === String(id))) {
+      return res.status(400).json({ error: "Product met dit ID bestaat al" });
+    }
+    
+    // Voeg product toe
+    const newProduct = {
+      id: String(id),
+      name: String(name),
+      price: Number(price) || 0,
+      image: image || undefined,
+    };
+    
+    products.push(newProduct);
+    
+    // Schrijf naar products.json
+    if (!writeProductsFile(products)) {
+      return res.status(500).json({ error: "Kon product niet toevoegen" });
+    }
+    
+    // Sla voorraad op in stock.json
+    if (stock !== undefined && stock !== null) {
+      const stockMap = readStockMap();
+      stockMap[String(id)] = Math.max(0, Math.floor(Number(stock) || 0));
+      writeStockMap(stockMap);
+    }
+    
+    res.json({ success: true, product: newProduct });
+  } catch (e) {
+    console.error("Error adding product:", e);
+    res.status(500).json({ error: "Failed to add product" });
+  }
+});
+
+// Bewerk product
+app.put("/api/admin/products/:id", async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const { name, price, image } = req.body;
+    
+    const state = readCatalogState();
+    const products = state.list || [];
+    
+    const productIndex = products.findIndex((p) => String(p.id) === String(productId));
+    if (productIndex === -1) {
+      return res.status(404).json({ error: "Product niet gevonden" });
+    }
+    
+    // Update product
+    if (name !== undefined) products[productIndex].name = String(name);
+    if (price !== undefined) products[productIndex].price = Number(price) || 0;
+    if (image !== undefined) products[productIndex].image = image || undefined;
+    
+    // Schrijf naar products.json
+    if (!writeProductsFile(products)) {
+      return res.status(500).json({ error: "Kon product niet bijwerken" });
+    }
+    
+    res.json({ success: true, product: products[productIndex] });
+  } catch (e) {
+    console.error("Error updating product:", e);
+    res.status(500).json({ error: "Failed to update product" });
+  }
+});
+
+// Verwijder product
+app.delete("/api/admin/products/:id", async (req, res) => {
+  try {
+    const productId = req.params.id;
+    
+    const state = readCatalogState();
+    const products = state.list || [];
+    
+    const productIndex = products.findIndex((p) => String(p.id) === String(productId));
+    if (productIndex === -1) {
+      return res.status(404).json({ error: "Product niet gevonden" });
+    }
+    
+    // Verwijder product
+    products.splice(productIndex, 1);
+    
+    // Schrijf naar products.json
+    if (!writeProductsFile(products)) {
+      return res.status(500).json({ error: "Kon product niet verwijderen" });
+    }
+    
+    // Verwijder voorraad uit stock.json
+    const stockMap = readStockMap();
+    delete stockMap[productId];
+    writeStockMap(stockMap);
+    
+    res.json({ success: true });
+  } catch (e) {
+    console.error("Error deleting product:", e);
+    res.status(500).json({ error: "Failed to delete product" });
+  }
+});
+
+// Update voorraad
+app.put("/api/admin/stock/:id", async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const { stock } = req.body;
+    
+    if (stock === undefined || stock === null) {
+      return res.status(400).json({ error: "stock is verplicht" });
+    }
+    
+    const stockAmount = Math.max(0, Math.floor(Number(stock) || 0));
+    
+    const stockMap = readStockMap();
+    stockMap[productId] = stockAmount;
+    
+    if (!writeStockMap(stockMap)) {
+      return res.status(500).json({ error: "Kon voorraad niet bijwerken" });
+    }
+    
+    res.json({ success: true, stock: stockAmount });
+  } catch (e) {
+    console.error("Error updating stock:", e);
+    res.status(500).json({ error: "Failed to update stock" });
   }
 });
 
