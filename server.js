@@ -115,20 +115,33 @@ const PRODUCTS_PATH = path.join(__dirname, "products.json");
 // Update voorraad direct in products.json
 function updateStockInProducts(productId, newStock) {
   try {
+    console.log(`🔄 Update voorraad: ${productId} → ${newStock}`);
     const state = readCatalogState();
     const products = state.list || [];
     
     const product = products.find((p) => String(p.id) === String(productId));
     if (!product) {
+      console.error(`❌ Product niet gevonden: ${productId}`);
       return false;
     }
     
+    const oldStock = product.stock;
     const stockValue = Math.max(0, Math.floor(Number(newStock) || 0));
     product.stock = stockValue;
     
-    return writeProductsFile(products);
+    console.log(`📝 Voorraad wijziging: ${product.name} (${oldStock} → ${stockValue})`);
+    
+    const success = writeProductsFile(products);
+    if (success) {
+      console.log(`✅ Voorraad succesvol bijgewerkt voor ${productId}`);
+    } else {
+      console.error(`❌ Schrijven naar products.json mislukt voor ${productId}`);
+    }
+    
+    return success;
   } catch (e) {
     console.error("❌ Kon voorraad niet bijwerken:", e.message);
+    console.error(e.stack);
     return false;
   }
 }
@@ -170,12 +183,34 @@ function writeProductsFile(products) {
     if (!Array.isArray(products)) {
       throw new Error("Products must be an array");
     }
+    
+    console.log(`💾 Schrijven naar: ${PRODUCTS_PATH}`);
+    console.log(`📦 Aantal producten: ${products.length}`);
+    
     const jsonContent = JSON.stringify(products, null, 2);
+    
+    // Check of directory bestaat
+    const dir = path.dirname(PRODUCTS_PATH);
+    if (!fs.existsSync(dir)) {
+      console.log(`📁 Directory bestaat niet, aanmaken: ${dir}`);
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    // Schrijf bestand
     fs.writeFileSync(PRODUCTS_PATH, jsonContent, "utf8");
-    console.log(`💾 products.json bijgewerkt met ${products.length} producten`);
-    return true;
+    
+    // Verifieer dat het bestand is geschreven
+    if (fs.existsSync(PRODUCTS_PATH)) {
+      const stats = fs.statSync(PRODUCTS_PATH);
+      console.log(`✅ products.json succesvol geschreven (${stats.size} bytes)`);
+      return true;
+    } else {
+      console.error(`❌ products.json bestaat niet na schrijven!`);
+      return false;
+    }
   } catch (e) {
     console.error("❌ Kon products.json niet schrijven:", e.message);
+    console.error("❌ Error details:", e);
     return false;
   }
 }
@@ -1406,20 +1441,29 @@ app.put("/api/admin/stock/:id", async (req, res) => {
     const productId = req.params.id;
     const { stock } = req.body;
     
+    console.log(`📥 Voorraad update request: ${productId}, stock: ${stock}`);
+    
     if (stock === undefined || stock === null) {
+      console.error("❌ Stock is niet opgegeven");
       return res.status(400).json({ error: "stock is verplicht" });
     }
     
     const stockAmount = Math.max(0, Math.floor(Number(stock) || 0));
+    console.log(`🔢 Stock amount: ${stockAmount}`);
     
-    if (!updateStockInProducts(productId, stockAmount)) {
+    const success = updateStockInProducts(productId, stockAmount);
+    
+    if (!success) {
+      console.error(`❌ Update mislukt voor ${productId}`);
       return res.status(500).json({ error: "Kon voorraad niet bijwerken" });
     }
     
+    console.log(`✅ Update succesvol voor ${productId}`);
     res.json({ success: true, stock: stockAmount });
   } catch (e) {
-    console.error("Error updating stock:", e);
-    res.status(500).json({ error: "Failed to update stock" });
+    console.error("❌ Error updating stock:", e);
+    console.error(e.stack);
+    res.status(500).json({ error: "Failed to update stock: " + e.message });
   }
 });
 
