@@ -1304,6 +1304,15 @@ app.get("/api/order-details", async (req, res) => {
 // ADMIN API ENDPOINTS
 // =======================
 
+// Test endpoint om te controleren of admin endpoints werken
+app.get("/api/admin/test", (_req, res) => {
+  res.json({ 
+    success: true, 
+    message: "Admin API is actief",
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Haal alle producten op met voorraad
 app.get("/api/admin/products", async (req, res) => {
   try {
