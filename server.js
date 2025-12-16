@@ -113,6 +113,8 @@ app.use("/api/mollie/webhook", express.urlencoded({ extended: false }));
 // Gebruik Persistent Disk op Render, anders lokale directory
 const PERSISTENT_DISK_PATH = process.env.PERSISTENT_DISK_PATH || "/data";
 const PRODUCTS_PATH = process.env.PRODUCTS_PATH || path.join(PERSISTENT_DISK_PATH, "products.json");
+// Backup locatie voor products.json (op Persistent Disk)
+const PRODUCTS_BACKUP_PATH = process.env.PRODUCTS_BACKUP_PATH || path.join(PERSISTENT_DISK_PATH, ".products_backup.json");
 
 // Update voorraad direct in products.json
 function updateStockInProducts(productId, newStock) {
@@ -1497,9 +1499,6 @@ function ensurePersistentDiskDirectory() {
 
 // Initialiseer Persistent Disk directory
 ensurePersistentDiskDirectory();
-
-// Backup locatie voor products.json (op Persistent Disk)
-const PRODUCTS_BACKUP_PATH = process.env.PRODUCTS_BACKUP_PATH || path.join(PERSISTENT_DISK_PATH, ".products_backup.json");
 
 // Herstel products.json vanuit backup na deploy (als backup bestaat)
 function restoreProductsFromBackup() {
