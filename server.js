@@ -111,6 +111,58 @@ app.use("/api/mollie/webhook", express.urlencoded({ extended: false }));
 
 /* ------------ Helpers voor producten/voorraad ------------ */
 const PRODUCTS_PATH = path.join(__dirname, "products.json");
+const STOCK_PATH = path.join(__dirname, "stock.json");
+
+// Initialiseer stock.json vanuit products.json bij eerste start
+function initializeStockMap() {
+  if (fs.existsSync(STOCK_PATH)) {
+    return; // stock.json bestaat al, geen initialisatie nodig
+  }
+  
+  try {
+    const state = readCatalogState();
+    const stockMap = {};
+    
+    // Kopieer voorraad uit products.json naar stock.json
+    for (const product of state.list || []) {
+      const id = String(product.id || "");
+      if (id) {
+        const stock = Number(product.stock ?? 0);
+        if (Number.isFinite(stock) && stock > 0) {
+          stockMap[id] = stock;
+        }
+      }
+    }
+    
+    writeStockMap(stockMap);
+    console.log("✅ stock.json geïnitialiseerd vanuit products.json");
+  } catch (e) {
+    console.error("Kon stock.json niet initialiseren:", e.message);
+  }
+}
+
+// Lees voorraad uit apart bestand (persistent)
+function readStockMap() {
+  try {
+    if (fs.existsSync(STOCK_PATH)) {
+      const raw = fs.readFileSync(STOCK_PATH, "utf8");
+      const data = JSON.parse(raw);
+      return data && typeof data === "object" ? data : {};
+    }
+  } catch (e) {
+    console.warn("Kon stock.json niet lezen, gebruik lege map:", e.message);
+  }
+  return {};
+}
+
+// Schrijf voorraad naar apart bestand (persistent)
+function writeStockMap(stockMap) {
+  try {
+    fs.writeFileSync(STOCK_PATH, JSON.stringify(stockMap, null, 2));
+  } catch (e) {
+    console.error("Kon stock.json niet schrijven:", e.message);
+  }
+}
 
 function readCatalogState() {
   try {
@@ -130,24 +182,31 @@ function readCatalogState() {
 }
 
 function writeCatalogState(state) {
-  const payload = state.type === "object" ? state.data : state.list;
-  fs.writeFileSync(PRODUCTS_PATH, JSON.stringify(payload, null, 2));
+  // NIET meer schrijven naar products.json - alleen lezen
+  // Voorraad wordt nu in stock.json beheerd
+  console.warn("writeCatalogState wordt aangeroepen maar products.json wordt niet meer geschreven (voorraad in stock.json)");
 }
 
-function normalizeProduct(p) {
+function normalizeProduct(p, stockMap = {}) {
   if (!p) {
     return { id: "", name: "", price: 0, image: undefined, stock: 0 };
   }
   const priceRaw =
     typeof p.price === "string" ? p.price.replace(",", ".") : p.price;
   const price = Number(priceRaw) || 0;
-  const stockRaw = Number(p.stock ?? 0);
+  
+  // Gebruik voorraad uit stock.json als beschikbaar, anders uit products.json
+  const productId = String(p.id);
+  const stockFromMap = stockMap[productId];
+  const stockRaw = stockFromMap !== undefined 
+    ? stockFromMap 
+    : Number(p.stock ?? 0);
   const stock = Number.isFinite(stockRaw)
     ? Math.max(0, Math.floor(stockRaw))
     : 0;
 
   return {
-    id: String(p.id),
+    id: productId,
     name: String(p.name),
     price,
     image: p.image || undefined,
@@ -157,7 +216,8 @@ function normalizeProduct(p) {
 
 function loadCatalog() {
   const state = readCatalogState();
-  return state.list.map(normalizeProduct);
+  const stockMap = readStockMap(); // Lees voorraad uit stock.json
+  return state.list.map((p) => normalizeProduct(p, stockMap));
 }
 
 function calcTotal(items, catalog = loadCatalog()) {
@@ -207,10 +267,10 @@ function extractItemsFromMetadata(metadata) {
 function updateStockForItems(items) {
   if (!Array.isArray(items) || items.length === 0) return false;
 
-  const state = readCatalogState();
-  const { list } = state;
-  if (!Array.isArray(list) || list.length === 0) return false;
+  const catalog = loadCatalog(); // Gebruik loadCatalog om stock.json te lezen
+  if (!Array.isArray(catalog) || catalog.length === 0) return false;
 
+  const stockMap = readStockMap(); // Lees huidige voorraad
   let changed = false;
 
   for (const item of items) {
@@ -218,22 +278,26 @@ function updateStockForItems(items) {
     const qty = Math.max(0, Number(item?.qty || 0));
     if (!id || qty <= 0) continue;
 
-    const entry = list.find((p) => String(p.id) === id);
-    if (!entry) continue;
+    const product = catalog.find((p) => String(p.id) === id);
+    if (!product) continue;
 
-    const currentRaw = Number(entry.stock ?? 0);
+    // Gebruik voorraad uit stockMap, of fallback naar product.stock
+    const currentRaw = stockMap[id] !== undefined 
+      ? stockMap[id] 
+      : Number(product.stock ?? 0);
     const current = Number.isFinite(currentRaw) ? currentRaw : 0;
     const next = Math.max(0, current - qty);
 
     if (next !== current) {
-      entry.stock = next;
+      stockMap[id] = next;
       changed = true;
     }
   }
 
   if (changed) {
     try {
-      writeCatalogState(state);
+      writeStockMap(stockMap); // Schrijf naar stock.json in plaats van products.json
+      console.log("✅ Voorraad bijgewerkt in stock.json");
     } catch (e) {
       console.error("Voorraad opslaan mislukt:", e);
     }
@@ -1219,6 +1283,9 @@ app.get("/api/order-details", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch order details" });
   }
 });
+
+// Initialiseer stock.json bij server start
+initializeStockMap();
 
 app.listen(PORT, () => {
   console.log(`✅ Server on :${PORT}`);
