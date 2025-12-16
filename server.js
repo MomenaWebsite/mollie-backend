@@ -110,7 +110,9 @@ app.use(cookieParser());
 app.use("/api/mollie/webhook", express.urlencoded({ extended: false }));
 
 /* ------------ Helpers voor producten/voorraad ------------ */
-const PRODUCTS_PATH = path.join(__dirname, "products.json");
+// Gebruik Persistent Disk op Render, anders lokale directory
+const PERSISTENT_DISK_PATH = process.env.PERSISTENT_DISK_PATH || "/data";
+const PRODUCTS_PATH = process.env.PRODUCTS_PATH || path.join(PERSISTENT_DISK_PATH, "products.json");
 
 // Update voorraad direct in products.json
 function updateStockInProducts(productId, newStock) {
@@ -177,7 +179,7 @@ function writeCatalogState(state) {
 }
 
 // Schrijf products.json (alleen voor admin interface)
-// Op Render: Bestand wordt bijgewerkt, maar blijft behouden tussen deploys
+// Op Render: Maak ook een backup die behouden blijft tussen deploys
 function writeProductsFile(products) {
   try {
     if (!Array.isArray(products)) {
@@ -198,6 +200,9 @@ function writeProductsFile(products) {
     
     // Schrijf bestand
     fs.writeFileSync(PRODUCTS_PATH, jsonContent, "utf8");
+    
+    // Maak ook een backup (deze blijft behouden tussen deploys)
+    backupProductsFile(products);
     
     // Verifieer dat het bestand is geschreven
     if (fs.existsSync(PRODUCTS_PATH)) {
@@ -1468,14 +1473,104 @@ app.put("/api/admin/stock/:id", async (req, res) => {
 });
 
 // Products.json is nu de enige bron voor producten en voorraad
-// Op Render: Zorg dat products.json op Persistent Disk staat of in de repo
+// Op Render: Gebruik Persistent Disk voor persistentie tussen deploys
 console.log("✅ Producten en voorraad worden beheerd via products.json");
-console.log(`📁 Locatie: ${PRODUCTS_PATH}`);
+console.log(`📁 Persistent Disk Path: ${PERSISTENT_DISK_PATH}`);
+console.log(`📁 Products.json Locatie: ${PRODUCTS_PATH}`);
+console.log(`📁 Backup Locatie: ${PRODUCTS_BACKUP_PATH}`);
+
+// Zorg dat Persistent Disk directory bestaat
+function ensurePersistentDiskDirectory() {
+  try {
+    if (!fs.existsSync(PERSISTENT_DISK_PATH)) {
+      console.log(`📁 Persistent Disk directory bestaat niet, aanmaken: ${PERSISTENT_DISK_PATH}`);
+      fs.mkdirSync(PERSISTENT_DISK_PATH, { recursive: true });
+      console.log(`✅ Persistent Disk directory aangemaakt`);
+    } else {
+      console.log(`✅ Persistent Disk directory bestaat: ${PERSISTENT_DISK_PATH}`);
+    }
+  } catch (e) {
+    console.error(`❌ Kon Persistent Disk directory niet aanmaken: ${e.message}`);
+    console.warn(`⚠️ Val terug op lokale directory: ${__dirname}`);
+  }
+}
+
+// Initialiseer Persistent Disk directory
+ensurePersistentDiskDirectory();
+
+// Backup locatie voor products.json (op Persistent Disk)
+const PRODUCTS_BACKUP_PATH = process.env.PRODUCTS_BACKUP_PATH || path.join(PERSISTENT_DISK_PATH, ".products_backup.json");
+
+// Herstel products.json vanuit backup na deploy (als backup bestaat)
+function restoreProductsFromBackup() {
+  try {
+    if (fs.existsSync(PRODUCTS_BACKUP_PATH)) {
+      console.log("🔄 Herstellen products.json vanuit backup...");
+      const backupData = fs.readFileSync(PRODUCTS_BACKUP_PATH, "utf8");
+      const backupProducts = JSON.parse(backupData);
+      
+      if (Array.isArray(backupProducts) && backupProducts.length > 0) {
+        // Check of huidige products.json leeg is of ouder dan backup
+        let shouldRestore = false;
+        
+        if (!fs.existsSync(PRODUCTS_PATH)) {
+          shouldRestore = true;
+        } else {
+          const currentData = fs.readFileSync(PRODUCTS_PATH, "utf8");
+          const currentProducts = JSON.parse(currentData);
+          
+          // Als backup meer producten heeft of nieuwer is, restore
+          if (backupProducts.length > currentProducts.length) {
+            shouldRestore = true;
+          } else {
+            // Check laatste wijziging (via stock waarden - simpele check)
+            const backupHasChanges = backupProducts.some((bp, i) => {
+              const cp = currentProducts[i];
+              return cp && bp.stock !== cp.stock;
+            });
+            if (backupHasChanges) {
+              shouldRestore = true;
+            }
+          }
+        }
+        
+        if (shouldRestore) {
+          writeProductsFile(backupProducts);
+          console.log(`✅ products.json hersteld vanuit backup (${backupProducts.length} producten)`);
+        } else {
+          console.log("ℹ️ products.json is up-to-date, geen restore nodig");
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("⚠️ Kon backup niet herstellen:", e.message);
+  }
+}
+
+// Maak backup van products.json bij elke wijziging
+function backupProductsFile(products) {
+  try {
+    const backupData = JSON.stringify(products, null, 2);
+    fs.writeFileSync(PRODUCTS_BACKUP_PATH, backupData, "utf8");
+    console.log(`💾 Backup gemaakt: ${PRODUCTS_BACKUP_PATH}`);
+  } catch (e) {
+    console.warn("⚠️ Kon backup niet maken:", e.message);
+  }
+}
 
 // Initialiseer products.json als het niet bestaat
 if (!fs.existsSync(PRODUCTS_PATH)) {
-  console.log("📦 Initialiseren lege products.json...");
-  writeProductsFile([]);
+  console.log("📦 Initialiseren products.json...");
+  // Probeer eerst te herstellen vanuit backup
+  restoreProductsFromBackup();
+  
+  // Als het nog steeds niet bestaat, maak een leeg bestand
+  if (!fs.existsSync(PRODUCTS_PATH)) {
+    writeProductsFile([]);
+  }
+} else {
+  // Bestand bestaat, maar check of we moeten herstellen vanuit backup
+  restoreProductsFromBackup();
 }
 
 app.listen(PORT, () => {
