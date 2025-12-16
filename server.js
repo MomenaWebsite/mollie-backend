@@ -112,9 +112,48 @@ app.use("/api/mollie/webhook", express.urlencoded({ extended: false }));
 /* ------------ Helpers voor producten/voorraad ------------ */
 // Gebruik Persistent Disk op Render, anders lokale directory
 const PERSISTENT_DISK_PATH = process.env.PERSISTENT_DISK_PATH || "/data";
-const PRODUCTS_PATH = process.env.PRODUCTS_PATH || path.join(PERSISTENT_DISK_PATH, "products.json");
-// Backup locatie voor products.json (op Persistent Disk)
-const PRODUCTS_BACKUP_PATH = process.env.PRODUCTS_BACKUP_PATH || path.join(PERSISTENT_DISK_PATH, ".products_backup.json");
+
+// Functie om te bepalen of Persistent Disk beschikbaar is
+function getProductsPath() {
+  const diskPath = process.env.PRODUCTS_PATH || path.join(PERSISTENT_DISK_PATH, "products.json");
+  const localPath = path.join(__dirname, "products.json");
+  
+  // Check of Persistent Disk beschikbaar is
+  if (fs.existsSync(PERSISTENT_DISK_PATH)) {
+    try {
+      // Test schrijven
+      const testFile = path.join(PERSISTENT_DISK_PATH, ".test");
+      fs.writeFileSync(testFile, "test");
+      fs.unlinkSync(testFile);
+      return diskPath;
+    } catch (e) {
+      console.warn(`⚠️ Persistent Disk niet beschikbaar, gebruik lokale path: ${localPath}`);
+      return localPath;
+    }
+  }
+  return localPath;
+}
+
+function getBackupPath() {
+  const diskPath = process.env.PRODUCTS_BACKUP_PATH || path.join(PERSISTENT_DISK_PATH, ".products_backup.json");
+  const localPath = path.join(__dirname, ".products_backup.json");
+  
+  if (fs.existsSync(PERSISTENT_DISK_PATH)) {
+    try {
+      const testFile = path.join(PERSISTENT_DISK_PATH, ".test");
+      fs.writeFileSync(testFile, "test");
+      fs.unlinkSync(testFile);
+      return diskPath;
+    } catch (e) {
+      return localPath;
+    }
+  }
+  return localPath;
+}
+
+// Gebruik functies om paths te krijgen (wordt later geïnitialiseerd)
+let PRODUCTS_PATH = getProductsPath();
+let PRODUCTS_BACKUP_PATH = getBackupPath();
 
 // Update voorraad direct in products.json
 function updateStockInProducts(productId, newStock) {
@@ -152,25 +191,44 @@ function updateStockInProducts(productId, newStock) {
 
 function readCatalogState() {
   try {
+    console.log(`📖 Lezen van: ${PRODUCTS_PATH}`);
+    
     // Check of products.json bestaat
     if (!fs.existsSync(PRODUCTS_PATH)) {
-      console.warn("⚠️ products.json niet gevonden, maak een lege array aan");
+      console.warn(`⚠️ products.json niet gevonden op: ${PRODUCTS_PATH}`);
+      console.log("📦 Maak een leeg bestand aan...");
       // Maak een leeg bestand aan als het niet bestaat
       writeProductsFile([]);
+      
+      // Check opnieuw of het nu bestaat
+      if (fs.existsSync(PRODUCTS_PATH)) {
+        console.log("✅ products.json aangemaakt");
+      } else {
+        console.error(`❌ Kon products.json niet aanmaken op: ${PRODUCTS_PATH}`);
+      }
+      
       return { data: [], list: [], type: "array" };
     }
     
+    console.log(`✅ products.json gevonden, lezen...`);
     const raw = fs.readFileSync(PRODUCTS_PATH, "utf8");
     const data = JSON.parse(raw);
+    
     if (Array.isArray(data)) {
+      console.log(`✅ ${data.length} producten geladen uit products.json`);
       return { data, list: data, type: "array" };
     }
     if (data && Array.isArray(data.products)) {
+      console.log(`✅ ${data.products.length} producten geladen uit products.json`);
       return { data, list: data.products, type: "object" };
     }
+    
+    console.warn("⚠️ products.json heeft ongeldige structuur");
     return { data: [], list: [], type: "array" };
   } catch (e) {
-    console.error("Failed to load/parse products.json:", e.message);
+    console.error(`❌ Failed to load/parse products.json: ${e.message}`);
+    console.error(`❌ Path: ${PRODUCTS_PATH}`);
+    console.error(e.stack);
     return { data: [], list: [], type: "array" };
   }
 }
@@ -1319,10 +1377,38 @@ app.get("/api/order-details", async (req, res) => {
 
 // Test endpoint om te controleren of admin endpoints werken
 app.get("/api/admin/test", (_req, res) => {
+  const fileExists = fs.existsSync(PRODUCTS_PATH);
+  const backupExists = fs.existsSync(PRODUCTS_BACKUP_PATH);
+  const diskExists = fs.existsSync(PERSISTENT_DISK_PATH);
+  
+  let fileSize = 0;
+  let fileContent = null;
+  if (fileExists) {
+    try {
+      const stats = fs.statSync(PRODUCTS_PATH);
+      fileSize = stats.size;
+      fileContent = fs.readFileSync(PRODUCTS_PATH, "utf8");
+    } catch (e) {
+      // Ignore
+    }
+  }
+  
   res.json({ 
     success: true, 
     message: "Admin API is actief",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    paths: {
+      persistentDisk: PERSISTENT_DISK_PATH,
+      products: PRODUCTS_PATH,
+      backup: PRODUCTS_BACKUP_PATH
+    },
+    status: {
+      diskExists,
+      fileExists,
+      backupExists,
+      fileSize,
+      productCount: fileContent ? JSON.parse(fileContent).length : 0
+    }
   });
 });
 
@@ -1484,21 +1570,55 @@ console.log(`📁 Backup Locatie: ${PRODUCTS_BACKUP_PATH}`);
 // Zorg dat Persistent Disk directory bestaat
 function ensurePersistentDiskDirectory() {
   try {
+    console.log(`🔍 Controleren Persistent Disk: ${PERSISTENT_DISK_PATH}`);
+    
     if (!fs.existsSync(PERSISTENT_DISK_PATH)) {
-      console.log(`📁 Persistent Disk directory bestaat niet, aanmaken: ${PERSISTENT_DISK_PATH}`);
-      fs.mkdirSync(PERSISTENT_DISK_PATH, { recursive: true });
-      console.log(`✅ Persistent Disk directory aangemaakt`);
+      console.log(`📁 Persistent Disk directory bestaat niet, proberen aan te maken: ${PERSISTENT_DISK_PATH}`);
+      try {
+        fs.mkdirSync(PERSISTENT_DISK_PATH, { recursive: true });
+        console.log(`✅ Persistent Disk directory aangemaakt`);
+      } catch (mkdirError) {
+        console.error(`❌ Kon Persistent Disk directory niet aanmaken: ${mkdirError.message}`);
+        console.warn(`⚠️ Persistent Disk lijkt niet beschikbaar, val terug op lokale directory`);
+        return false;
+      }
     } else {
       console.log(`✅ Persistent Disk directory bestaat: ${PERSISTENT_DISK_PATH}`);
     }
+    
+    // Test of we kunnen schrijven naar de disk
+    try {
+      const testFile = path.join(PERSISTENT_DISK_PATH, ".test_write");
+      fs.writeFileSync(testFile, "test");
+      fs.unlinkSync(testFile);
+      console.log(`✅ Schrijftest naar Persistent Disk geslaagd`);
+      return true;
+    } catch (writeError) {
+      console.error(`❌ Kan niet schrijven naar Persistent Disk: ${writeError.message}`);
+      console.warn(`⚠️ Permissions probleem of disk niet beschikbaar`);
+      return false;
+    }
   } catch (e) {
-    console.error(`❌ Kon Persistent Disk directory niet aanmaken: ${e.message}`);
-    console.warn(`⚠️ Val terug op lokale directory: ${__dirname}`);
+    console.error(`❌ Error bij Persistent Disk check: ${e.message}`);
+    return false;
   }
 }
 
-// Initialiseer Persistent Disk directory
-ensurePersistentDiskDirectory();
+// Initialiseer Persistent Disk directory en update paths
+const persistentDiskAvailable = ensurePersistentDiskDirectory();
+
+// Update paths op basis van beschikbaarheid
+if (!persistentDiskAvailable) {
+  console.warn(`⚠️ Persistent Disk niet beschikbaar, gebruik lokale directory: ${__dirname}`);
+  PRODUCTS_PATH = path.join(__dirname, "products.json");
+  PRODUCTS_BACKUP_PATH = path.join(__dirname, ".products_backup.json");
+  console.log(`📁 Fallback: Products.json Locatie: ${PRODUCTS_PATH}`);
+} else {
+  // Herinitialiseer paths om zeker te zijn
+  PRODUCTS_PATH = getProductsPath();
+  PRODUCTS_BACKUP_PATH = getBackupPath();
+  console.log(`✅ Persistent Disk beschikbaar, gebruik: ${PRODUCTS_PATH}`);
+}
 
 // Herstel products.json vanuit backup na deploy (als backup bestaat)
 function restoreProductsFromBackup() {
@@ -1558,18 +1678,48 @@ function backupProductsFile(products) {
 }
 
 // Initialiseer products.json als het niet bestaat
+console.log(`🔍 Controleren products.json op: ${PRODUCTS_PATH}`);
+
 if (!fs.existsSync(PRODUCTS_PATH)) {
-  console.log("📦 Initialiseren products.json...");
+  console.log("📦 products.json niet gevonden, initialiseren...");
+  
   // Probeer eerst te herstellen vanuit backup
   restoreProductsFromBackup();
   
+  // Als het nog steeds niet bestaat, check of er een bestand in de lokale directory staat
+  const localProductsPath = path.join(__dirname, "products.json");
+  if (!fs.existsSync(PRODUCTS_PATH) && fs.existsSync(localProductsPath)) {
+    console.log("📋 products.json gevonden in lokale directory, kopieer naar Persistent Disk...");
+    try {
+      const localData = fs.readFileSync(localProductsPath, "utf8");
+      const localProducts = JSON.parse(localData);
+      if (Array.isArray(localProducts) && localProducts.length > 0) {
+        writeProductsFile(localProducts);
+        console.log(`✅ ${localProducts.length} producten gekopieerd naar Persistent Disk`);
+      }
+    } catch (e) {
+      console.warn("⚠️ Kon lokale products.json niet kopiëren:", e.message);
+    }
+  }
+  
   // Als het nog steeds niet bestaat, maak een leeg bestand
   if (!fs.existsSync(PRODUCTS_PATH)) {
+    console.log("📝 Maak leeg products.json bestand aan...");
     writeProductsFile([]);
   }
 } else {
+  console.log("✅ products.json bestaat al");
   // Bestand bestaat, maar check of we moeten herstellen vanuit backup
   restoreProductsFromBackup();
+  
+  // Verifieer dat we het kunnen lezen
+  try {
+    const testRead = fs.readFileSync(PRODUCTS_PATH, "utf8");
+    const testData = JSON.parse(testRead);
+    console.log(`✅ products.json is leesbaar, bevat ${Array.isArray(testData) ? testData.length : 0} producten`);
+  } catch (e) {
+    console.error(`❌ Kan products.json niet lezen: ${e.message}`);
+  }
 }
 
 app.listen(PORT, () => {
