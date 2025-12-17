@@ -1108,6 +1108,100 @@ async function sendOrderConfirmationEmail(orderData) {
   }
 }
 
+/* --------- Email Subscription ---------- */
+async function sendSubscriptionEmail(email) {
+  if (!SENDGRID_API_KEY) {
+    console.warn("⚠️ SENDGRID_API_KEY niet ingesteld, email niet verzonden");
+    console.log(`📧 Nieuw e-mailadres (niet verzonden): ${email}`);
+    return;
+  }
+
+  try {
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h1 style="color: #333; margin-top: 0;">Nieuw e-mailadres aangemeld</h1>
+            
+            <p>Er heeft iemand zijn/haar e-mailadres achtergelaten op de website.</p>
+            
+            <div style="background: #f5f5f5; padding: 16px; border-radius: 4px; margin: 20px 0;">
+              <p style="margin: 0; font-size: 16px; font-weight: 600;">
+                E-mailadres: <a href="mailto:${email}" style="color: #0070f3; text-decoration: none;">${email}</a>
+              </p>
+            </div>
+            
+            <p style="font-size: 14px; color: #666; margin-top: 24px;">
+              Dit e-mailadres is verzameld via het aanmeldformulier op de website.
+            </p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const textContent = `
+NIEUW E-MAILADRES AANGEMELD
+
+Er heeft iemand zijn/haar e-mailadres achtergelaten op de website.
+
+E-mailadres: ${email}
+
+Dit e-mailadres is verzameld via het aanmeldformulier op de website.
+    `.trim();
+
+    await sgMail.send({
+      to: ORDER_EMAIL_TO,
+      from: EMAIL_FROM,
+      subject: `Nieuw e-mailadres aangemeld: ${email}`,
+      text: textContent,
+      html: htmlContent,
+    });
+    
+    console.log(`✅ Subscription email verzonden naar ${ORDER_EMAIL_TO} voor: ${email}`);
+  } catch (error) {
+    console.error("❌ Fout bij verzenden subscription email:", error);
+    if (error.response) {
+      console.error("SendGrid error details:", error.response.body);
+    }
+    // Log de email als fallback
+    console.log(`📧 Nieuw e-mailadres (fallback): ${email}`);
+  }
+}
+
+app.post("/api/subscribe", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ error: "E-mailadres is verplicht" });
+    }
+
+    // Valideer e-mail formaat
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      return res.status(400).json({ error: "Ongeldig e-mailadres" });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Verstuur e-mail naar bestellingen@momena.nl
+    await sendSubscriptionEmail(normalizedEmail);
+
+    res.json({ 
+      success: true, 
+      message: "E-mailadres succesvol verzonden" 
+    });
+  } catch (error) {
+    console.error("❌ Fout bij verwerken subscription:", error);
+    res.status(500).json({ error: "Fout bij verwerken aanvraag" });
+  }
+});
+
 /* --------- Checkout ---------- */
 app.post("/api/create-payment-from-cart", async (req, res) => {
   try {
@@ -1374,6 +1468,39 @@ app.get("/api/order-details", async (req, res) => {
 // =======================
 // ADMIN API ENDPOINTS
 // =======================
+
+// Endpoint om producten te kopiëren van lokale directory naar Persistent Disk
+app.post("/api/admin/copy-products", async (req, res) => {
+  try {
+    const localProductsPath = path.join(__dirname, "products.json");
+    
+    if (!fs.existsSync(localProductsPath)) {
+      return res.status(404).json({ error: "Lokale products.json niet gevonden" });
+    }
+    
+    const localData = fs.readFileSync(localProductsPath, "utf8");
+    const localProducts = JSON.parse(localData);
+    
+    if (!Array.isArray(localProducts) || localProducts.length === 0) {
+      return res.status(400).json({ error: "Lokale products.json is leeg" });
+    }
+    
+    const success = writeProductsFile(localProducts);
+    
+    if (success) {
+      res.json({ 
+        success: true, 
+        message: `${localProducts.length} producten gekopieerd naar Persistent Disk`,
+        count: localProducts.length
+      });
+    } else {
+      res.status(500).json({ error: "Kon niet schrijven naar Persistent Disk" });
+    }
+  } catch (e) {
+    console.error("Error copying products:", e);
+    res.status(500).json({ error: "Failed to copy products: " + e.message });
+  }
+});
 
 // Test endpoint om te controleren of admin endpoints werken
 app.get("/api/admin/test", (_req, res) => {
@@ -1686,9 +1813,29 @@ if (!fs.existsSync(PRODUCTS_PATH)) {
   // Probeer eerst te herstellen vanuit backup
   restoreProductsFromBackup();
   
-  // Als het nog steeds niet bestaat, check of er een bestand in de lokale directory staat
+  // Als het nog steeds niet bestaat OF leeg is, check of er een bestand in de lokale directory staat
   const localProductsPath = path.join(__dirname, "products.json");
-  if (!fs.existsSync(PRODUCTS_PATH) && fs.existsSync(localProductsPath)) {
+  let shouldCopy = false;
+  
+  // Check of Persistent Disk bestand leeg is
+  if (fs.existsSync(PRODUCTS_PATH)) {
+    try {
+      const diskData = fs.readFileSync(PRODUCTS_PATH, "utf8");
+      const diskProducts = JSON.parse(diskData);
+      if (!Array.isArray(diskProducts) || diskProducts.length === 0) {
+        console.log("📋 products.json op Persistent Disk is leeg, check lokale directory...");
+        shouldCopy = true;
+      }
+    } catch (e) {
+      console.warn("⚠️ Kon Persistent Disk bestand niet lezen:", e.message);
+      shouldCopy = true;
+    }
+  } else {
+    shouldCopy = true;
+  }
+  
+  // Kopieer van lokale directory naar Persistent Disk als nodig
+  if (shouldCopy && fs.existsSync(localProductsPath)) {
     console.log("📋 products.json gevonden in lokale directory, kopieer naar Persistent Disk...");
     try {
       const localData = fs.readFileSync(localProductsPath, "utf8");
@@ -1696,10 +1843,14 @@ if (!fs.existsSync(PRODUCTS_PATH)) {
       if (Array.isArray(localProducts) && localProducts.length > 0) {
         writeProductsFile(localProducts);
         console.log(`✅ ${localProducts.length} producten gekopieerd naar Persistent Disk`);
+      } else {
+        console.log("ℹ️ Lokale products.json is ook leeg");
       }
     } catch (e) {
       console.warn("⚠️ Kon lokale products.json niet kopiëren:", e.message);
     }
+  } else if (shouldCopy && !fs.existsSync(localProductsPath)) {
+    console.log("ℹ️ Geen lokale products.json gevonden om te kopiëren");
   }
   
   // Als het nog steeds niet bestaat, maak een leeg bestand
