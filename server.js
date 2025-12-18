@@ -1154,6 +1154,9 @@ E-mailadres: ${email}
 Dit e-mailadres is verzameld via het aanmeldformulier op de website.
     `.trim();
 
+    const discountCode = "WELKOM10";
+
+    // E-mail naar bestellingen@momena.nl (interne notificatie)
     await sgMail.send({
       to: ORDER_EMAIL_TO,
       from: EMAIL_FROM,
@@ -1163,6 +1166,75 @@ Dit e-mailadres is verzameld via het aanmeldformulier op de website.
     });
     
     console.log(`✅ Subscription email verzonden naar ${ORDER_EMAIL_TO} voor: ${email}`);
+
+    // E-mail naar gebruiker met kortingscode
+    const userHtmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background: #f5f5f5;">
+          <div style="background: #fff; border-radius: 8px; padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+            <h1 style="color: #333; margin-top: 0; text-align: center;">🎉 Welkom bij Momena!</h1>
+            
+            <p style="font-size: 16px; color: #666; text-align: center;">
+              Bedankt voor je aanmelding voor onze nieuwsbrief!
+            </p>
+            
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 24px; border-radius: 8px; margin: 24px 0; text-align: center;">
+              <p style="margin: 0 0 12px 0; color: #fff; font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">
+                Je kortingscode
+              </p>
+              <p style="margin: 0; color: #fff; font-size: 32px; font-weight: 700; letter-spacing: 4px; font-family: 'Courier New', monospace;">
+                ${discountCode}
+              </p>
+            </div>
+            
+            <p style="font-size: 16px; color: #333; margin: 24px 0;">
+              Gebruik deze code bij je volgende bestelling en ontvang <strong>10% korting</strong> op je hele bestelling!
+            </p>
+            
+            <div style="background: #f9f9f9; padding: 16px; border-radius: 6px; margin: 24px 0; border-left: 4px solid #667eea;">
+              <p style="margin: 0; font-size: 14px; color: #666;">
+                <strong>Hoe gebruik je de kortingscode?</strong><br>
+                Voeg producten toe aan je winkelwagen en voer bij het afrekenen de code <strong>${discountCode}</strong> in bij het kortingscode veld.
+              </p>
+            </div>
+            
+            <p style="font-size: 14px; color: #999; margin-top: 32px; text-align: center; border-top: 1px solid #eee; padding-top: 24px;">
+              Met vriendelijke groet,<br>
+              <strong>Het team van Momena</strong>
+            </p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const userTextContent = `Welkom bij Momena!
+
+Bedankt voor je aanmelding voor onze nieuwsbrief!
+
+Je kortingscode: ${discountCode}
+
+Gebruik deze code bij je volgende bestelling en ontvang 10% korting op je hele bestelling!
+
+Hoe gebruik je de kortingscode?
+Voeg producten toe aan je winkelwagen en voer bij het afrekenen de code ${discountCode} in bij het kortingscode veld.
+
+Met vriendelijke groet,
+Het team van Momena`;
+
+    await sgMail.send({
+      to: email,
+      from: EMAIL_FROM,
+      subject: "🎉 Welkom bij Momena! Je kortingscode",
+      text: userTextContent,
+      html: userHtmlContent,
+    });
+
+    console.log(`✅ Kortingscode e-mail verzonden naar: ${email}`);
   } catch (error) {
     console.error("❌ Fout bij verzenden subscription email:", error);
     if (error.response) {
