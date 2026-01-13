@@ -96,35 +96,52 @@ class TradingBot:
     def sync_positions_with_bitvavo(self):
         """Synchroniseer positions.json met werkelijke posities in Bitvavo"""
         try:
+            logger.info("🔄 Start synchronisatie met Bitvavo posities...")
+            
             # Haal werkelijke posities op van Bitvavo
             actual_positions = self.get_current_positions()
+            
+            logger.info(f"📊 Bitvavo heeft {len(actual_positions)} actieve posities:")
+            for market, data in actual_positions.items():
+                logger.info(f"   - {market}: {data['amount']:.8f} (waarde: ~{data['value']:.2f} EUR)")
+            
+            logger.info(f"📝 positions.json heeft {len(self.positions)} posities:")
+            for market in self.positions.keys():
+                logger.info(f"   - {market}")
             
             # Verwijder posities uit positions.json die niet meer bestaan in Bitvavo
             positions_to_remove = []
             for market in list(self.positions.keys()):
                 if market not in actual_positions:
                     positions_to_remove.append(market)
-                    logger.info(f"🗑️ Verwijder positie {market} uit positions.json (niet meer in Bitvavo)")
+                    logger.warning(f"🗑️ Verwijder positie {market} uit positions.json (niet meer in Bitvavo)")
             
             for market in positions_to_remove:
                 del self.positions[market]
             
             # Voeg nieuwe posities toe die wel in Bitvavo zijn maar niet in positions.json
+            positions_added = []
             for market, position_data in actual_positions.items():
                 if market not in self.positions:
-                    logger.info(f"➕ Voeg nieuwe positie toe: {market} (koop prijs: huidige prijs)")
+                    positions_added.append(market)
+                    logger.warning(f"➕ Voeg nieuwe positie toe: {market} (koop prijs: huidige prijs {position_data['current_price']:.2f})")
                     self.positions[market] = {
                         'buy_price': position_data['current_price'],
                         'amount': position_data['amount']
                     }
             
-            # Sla gesynchroniseerde posities op
-            if positions_to_remove or any(market not in self.positions for market in actual_positions.keys()):
-                self.save_positions()
-                logger.info(f"✅ Posities gesynchroniseerd: {len(self.positions)} actieve posities")
+            # ALTIJD opslaan na synchronisatie (ook als er geen wijzigingen zijn)
+            self.save_positions()
+            
+            if positions_to_remove or positions_added:
+                logger.info(f"✅ Posities gesynchroniseerd: {len(positions_to_remove)} verwijderd, {len(positions_added)} toegevoegd")
+            else:
+                logger.info(f"✅ Posities zijn al gesynchroniseerd: {len(self.positions)} actieve posities")
+            
+            logger.info(f"📊 Huidige posities na synchronisatie: {list(self.positions.keys())}")
             
         except Exception as e:
-            logger.error(f"❌ Fout bij synchroniseren posities: {e}")
+            logger.error(f"❌ Fout bij synchroniseren posities: {e}", exc_info=True)
     
     def check_balance(self):
         """Controleer beschikbare balance"""
@@ -327,6 +344,21 @@ class TradingBot:
         """Check alle posities op stop loss / take profit"""
         current_positions = self.get_current_positions()
         
+        # Verwijder eerst posities uit positions.json die niet meer bestaan in Bitvavo
+        positions_to_remove = []
+        for market in list(self.positions.keys()):
+            if market not in current_positions:
+                positions_to_remove.append(market)
+                logger.warning(f"🗑️ Verwijder oude positie {market} uit positions.json (niet meer in Bitvavo)")
+        
+        for market in positions_to_remove:
+            del self.positions[market]
+        
+        if positions_to_remove:
+            self.save_positions()
+            logger.info(f"✅ {len(positions_to_remove)} oude posities verwijderd")
+        
+        # Check nu alle bestaande posities op stop loss / take profit
         for market, position_data in current_positions.items():
             if market not in self.positions:
                 # Nieuwe positie die we niet hebben, voeg toe met huidige prijs
