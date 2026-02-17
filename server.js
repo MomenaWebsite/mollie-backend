@@ -746,12 +746,35 @@ function generateOrderEmailHTML(orderData) {
     discount,
     shippingCost,
     giftWrapCost,
+    giftWrapProductIds = [],
     subTotal: subTotalFromData,
     subtotal: subtotalFromData,
     total,
   } = orderData;
 
   const catalog = loadCatalog();
+
+  // Map: productId -> aantal dat ingepakt moet worden
+  const wrapCountById = {};
+  for (const id of giftWrapProductIds) {
+    wrapCountById[id] = (wrapCountById[id] || 0) + 1;
+  }
+  const wrappedProductNames = [];
+  for (const id of Object.keys(wrapCountById)) {
+    const prod = catalog.find((p) => String(p.id) === String(id));
+    const name = prod?.name || id;
+    const n = wrapCountById[id];
+    wrappedProductNames.push(n > 1 ? `${name} (${n}x)` : name);
+  }
+  const giftWrapSummaryHTML = giftWrapProductIds.length > 0
+    ? `
+    <div style="margin-bottom: 24px; padding: 16px; background: #fff8e1; border: 2px solid #ffc107; border-radius: 8px;">
+      <h3 style="margin: 0 0 8px 0; font-size: 16px; color: #e65100;">🎁 Cadeau inpakken</h3>
+      <p style="margin: 0; font-size: 14px; color: #333;">De volgende producten moeten als cadeau worden ingepakt:</p>
+      <p style="margin: 8px 0 0 0; font-size: 14px; font-weight: 600;">${wrappedProductNames.join(", ")}</p>
+    </div>
+    `
+    : "";
   
   // Enrich items met product informatie
   const enrichedItems = items.map((item) => {
@@ -784,6 +807,12 @@ function generateOrderEmailHTML(orderData) {
 
   const itemsHTML = enrichedItems
     .map((item) => {
+      const wrappedQty = wrapCountById[item.id] || 0;
+      const giftWrapHTML = wrappedQty > 0
+        ? `<div style="margin-top: 8px; padding: 8px; background: #e8f5e9; border-radius: 4px; font-size: 12px; color: #2e7d32;">
+            <strong>🎁 Cadeauverpakking</strong>${wrappedQty > 1 ? ` (${wrappedQty}x)` : ""}
+          </div>`
+        : "";
       const safeImageUrl = ensureHttps(item.image);
       const imageHTML = safeImageUrl
         ? `<img src="${safeImageUrl}" alt="${item.name}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px;" />`
@@ -823,6 +852,7 @@ function generateOrderEmailHTML(orderData) {
                 ${sendNowHTML}
                 ${noteHTML}
                 ${attachedCandlesHTML}
+                ${giftWrapHTML}
               </div>
               <div style="text-align: right; font-weight: 600;">${formatEUR(item.lineTotal)}</div>
             </div>
@@ -847,6 +877,8 @@ function generateOrderEmailHTML(orderData) {
             <p><strong>Ordernummer:</strong> ${orderId}</p>
             <p><strong>Datum:</strong> ${new Date().toLocaleString("nl-NL")}</p>
           </div>
+
+          ${giftWrapSummaryHTML}
 
           <div style="margin-bottom: 24px; padding: 16px; background: #f5f5f5; border-radius: 8px;">
             <h2 style="margin-top: 0; font-size: 18px;">Afzender gegevens</h2>
@@ -916,12 +948,27 @@ function generateOrderEmailText(orderData) {
     discount,
     shippingCost,
     giftWrapCost,
+    giftWrapProductIds = [],
     subTotal: subTotalFromData,
     subtotal: subtotalFromData,
     total,
   } = orderData;
 
   const catalog = loadCatalog();
+  const wrapCountById = {};
+  for (const id of giftWrapProductIds) {
+    wrapCountById[id] = (wrapCountById[id] || 0) + 1;
+  }
+  const wrappedProductNames = [];
+  for (const id of Object.keys(wrapCountById)) {
+    const prod = catalog.find((p) => String(p.id) === String(id));
+    const name = prod?.name || id;
+    const n = wrapCountById[id];
+    wrappedProductNames.push(n > 1 ? `${name} (${n}x)` : name);
+  }
+  const giftWrapSummaryText = giftWrapProductIds.length > 0
+    ? `\n\n🎁 CADEAU INPAKKEN\nDe volgende producten moeten als cadeau worden ingepakt:\n${wrappedProductNames.join(", ")}\n`
+    : "";
   
   // Enrich items met product informatie
   const enrichedItems = items.map((item) => {
@@ -957,6 +1004,8 @@ function generateOrderEmailText(orderData) {
 
   const itemsText = enrichedItems
     .map((item) => {
+      const wrappedQty = wrapCountById[item.id] || 0;
+      const giftWrapText = wrappedQty > 0 ? `\n  🎁 Cadeauverpakking${wrappedQty > 1 ? ` (${wrappedQty}x)` : ""}` : "";
       const sendNowText = item.sendNow
         ? `\n  Direct verzonden naar:\n  ${item.shipping?.firstName || ""} ${item.shipping?.lastName || ""}\n  ${item.shipping?.streetAndNumber || ""}\n  ${item.shipping?.postalCode || ""} ${item.shipping?.city || ""}\n  ${item.shipping?.country || ""}\n  ${item.shipping?.deliveryDate ? `Aankomst: ${item.shipping.deliveryDate}` : ""}`
         : "";
@@ -964,7 +1013,7 @@ function generateOrderEmailText(orderData) {
       const attachedCandlesText = item.attachedCandles && item.attachedCandles.length > 0
         ? `\n  Meegestuurd: ${item.attachedCandles.map(c => `${c.qty} x ${c.id}`).join(", ")}`
         : "";
-      return `- ${item.name} (${item.qty} x ${formatEUR(item.price)}) = ${formatEUR(item.lineTotal)}${sendNowText}${noteText}${attachedCandlesText}`;
+      return `- ${item.name} (${item.qty} x ${formatEUR(item.price)}) = ${formatEUR(item.lineTotal)}${giftWrapText}${sendNowText}${noteText}${attachedCandlesText}`;
     })
     .join("\n\n");
 
@@ -973,7 +1022,7 @@ BESTELBEVESTIGING
 
 Ordernummer: ${orderId}
 Datum: ${new Date().toLocaleString("nl-NL")}
-
+${giftWrapSummaryText}
 AFZENDER GEGEVENS:
 ${sender?.firstName || ""} ${sender?.lastName || ""}
 ${sender?.streetAndNumber || ""}
@@ -1091,10 +1140,14 @@ async function sendOrderConfirmationEmail(orderData) {
     }
 
     // Email naar bestellingen@momena.nl
+    const hasWrapped = (orderData.giftWrapProductIds || []).length > 0;
+    const momenaSubject = hasWrapped
+      ? `🎁 Nieuwe bestelling ${orderData.orderId} (cadeau in te pakken)`
+      : `Nieuwe bestelling ${orderData.orderId}`;
     await sgMail.send({
       to: ORDER_EMAIL_TO,
       from: EMAIL_FROM,
-      subject: `Nieuwe bestelling ${orderData.orderId}`,
+      subject: momenaSubject,
       text: textContent,
       html: htmlContent,
     });
@@ -1282,11 +1335,12 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
     const senderPrefs = req.body?.senderPrefs || {};
     const orderId = req.body?.orderId || `order_${Date.now()}`;
     
-    // Haal discount, shippingCost en giftWrapCost uit de request body
+    // Haal discount, shippingCost, giftWrapCost en giftWrapProductIds uit de request body
     const discount = Number(req.body?.discount || 0);
     const promoCode = req.body?.promoCode || null;
     const shippingCost = Number(req.body?.shippingCost || 0);
     const giftWrapCost = Number(req.body?.giftWrapCost || 0);
+    const giftWrapProductIds = Array.isArray(req.body?.giftWrapProductIds) ? req.body.giftWrapProductIds : [];
 
     // Valideer kortingscode als deze is opgegeven (frontend berekent de korting al)
     if (promoCode) {
@@ -1318,10 +1372,11 @@ app.post("/api/create-payment-from-cart", async (req, res) => {
       items,
       sender,
       senderPrefs,
-      discount, // Totale korting (bulk + kortingscode, al berekend in frontend)
+      discount,
       promoCode: promoCode,
       shippingCost,
       giftWrapCost,
+      giftWrapProductIds, // Welke producten als cadeau ingepakt moeten
       subtotal,
       total,
     });
@@ -1469,7 +1524,7 @@ app.get("/api/order-details", async (req, res) => {
 
     // Haal order data uit in-memory storage (fallback naar metadata voor oude orders)
     const orderData = orderDataByOrderId.get(orderId);
-    let items, sender, senderPrefs, discount, shippingCost, giftWrapCost, subTotal, total;
+    let items, sender, senderPrefs, discount, shippingCost, giftWrapCost, giftWrapProductIds, subTotal, total;
     
     if (orderData) {
       // Nieuwe orders: gebruik in-memory data
@@ -1479,6 +1534,7 @@ app.get("/api/order-details", async (req, res) => {
       discount = Number(orderData.discount || 0);
       shippingCost = Number(orderData.shippingCost || 0);
       giftWrapCost = Number(orderData.giftWrapCost || 0);
+      giftWrapProductIds = Array.isArray(orderData.giftWrapProductIds) ? orderData.giftWrapProductIds : [];
       subTotal = Number(orderData.subtotal || 0);
       total = Number(orderData.total || 0);
     } else {
@@ -1490,14 +1546,19 @@ app.get("/api/order-details", async (req, res) => {
       discount = Number(metadata.discount || 0);
       shippingCost = Number(metadata.shippingCost || 0);
       giftWrapCost = Number(metadata.giftWrapCost || 0);
+      giftWrapProductIds = [];
       subTotal = 0; // Wordt later berekend
       total = 0; // Wordt later berekend
     }
 
-    // Enrich items met product informatie
+    const wrapCountById = {};
+    for (const id of (giftWrapProductIds || [])) {
+      wrapCountById[id] = (wrapCountById[id] || 0) + 1;
+    }
     const catalog = loadCatalog();
     const enrichedItems = items.map((item) => {
       const product = catalog.find((p) => String(p.id) === String(item.id));
+      const giftWrappedQty = wrapCountById[item.id] || 0;
       return {
         id: String(item.id || ""),
         name: product?.name || String(item.id || "Unknown"),
@@ -1509,14 +1570,13 @@ app.get("/api/order-details", async (req, res) => {
         note: item.note || undefined,
         shipping: item.shipping || undefined,
         attachedCandles: item.attachedCandles || undefined,
+        giftWrappedQty,
       };
     });
 
-    // Gebruik opgeslagen subtotaal/totaal als beschikbaar, anders bereken
     const finalSubTotal = subTotal > 0 ? subTotal : enrichedItems.reduce((sum, item) => sum + item.lineTotal, 0);
     const finalTotal = total > 0 ? total : Math.max(0, finalSubTotal - discount + shippingCost + giftWrapCost);
 
-    // Haal status op
     const status = statusesByOrderId.get(orderId) || payment.status || "unknown";
 
     res.json({
@@ -1527,6 +1587,7 @@ app.get("/api/order-details", async (req, res) => {
       discount,
       shippingCost,
       giftWrapCost,
+      giftWrapProductIds: giftWrapProductIds || [],
       subTotal: finalSubTotal,
       total: finalTotal,
       items: enrichedItems,
